@@ -412,7 +412,7 @@ body {
 
 .card:focus {
     outline: 2px solid var(--vscode-focusBorder);
-    outline-offset: 2px;
+    outline-offset: -4px;
 }
 
 .card.selected {
