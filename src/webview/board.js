@@ -3917,6 +3917,16 @@ ${card.design || 'None'}
     // Datetime inputs use native browser datepicker (no custom Save/Cancel buttons)
 
     detDialog.showModal();
+    // Both .dialogForm and its .edit-form-container child are scrollable:
+    // .dialogForm has overflow-y: auto, and .edit-form-container's
+    // `overflow-x: hidden` promotes its unset overflow-y to `auto` per CSS
+    // spec. The static dialog markup is reused across opens, so any retained
+    // scrollTop carries forward. Reset both so every open lands at the top.
+    form.scrollTop = 0;
+    const editFormContainer = form.querySelector('.edit-form-container');
+    if (editFormContainer) {
+        editFormContainer.scrollTop = 0;
+    }
 }
 
 
