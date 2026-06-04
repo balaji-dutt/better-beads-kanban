@@ -2,15 +2,15 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Regression guard for BK-001: the table view's ID column previously rendered
+// Regression guard: the table view's ID column previously rendered
 // `c.id.slice(-8)`, which silently dropped the repo prefix from longer IDs
-// (e.g. `dots-4jy.1.4` became `ts-4jy.1`). The same `.slice(-8)` truncation
+// (e.g. `mock-000001` became `k-000001`). The same `.slice(-8)` truncation
 // was also applied to the copy-confirmation toast, so it misreported the
 // clipboard contents. This suite asserts those two patterns stay removed.
 
 const BOARD_JS_PATH = path.resolve(__dirname, '..', '..', '..', 'src', 'webview', 'board.js');
 
-suite('Table ID rendering (BK-001 regression)', () => {
+suite('Table ID rendering regression', () => {
     let source: string;
 
     suiteSetup(() => {
