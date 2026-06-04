@@ -25,6 +25,10 @@ node_modules/**
 *.log
 .beads/**
 
+# Local-only working directory (untracked via .git/info/exclude — exclude
+# from VSIX too so scratch files don't bloat the package)
+.local/**
+
 # Documentation & Specs (keep only README, CHANGELOG, LICENSE, PUBLISHING, MIGRATION)
 AGENTS.md
 ARCHITECTURE_PROPOSAL_FAST_LOADING.md
