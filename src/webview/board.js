@@ -477,7 +477,7 @@ const tableColumns = [
     visible: true,
     width: 100,
     getValue: c => c.id,
-    render: (c) => `<span class="table-id copy-id" data-full-id="${escapeHtml(c.id)}" title="Click to copy: ${escapeHtml(c.id)}">${escapeHtml(c.id.slice(-8))}</span>`,
+    render: (c) => `<span class="table-id copy-id" data-full-id="${escapeHtml(c.id)}" title="Click to copy: ${escapeHtml(c.id)}">${escapeHtml(c.id)}</span>`,
     sort: (a, b) => a.id.localeCompare(b.id)
   },
   {
@@ -1851,7 +1851,7 @@ function renderTable() {
             e.stopPropagation();
             const fullId = cell.dataset.fullId;
             post('issue.copyToClipboard', { text: fullId });
-            toast(`Copied: ${fullId.slice(-8)}`);
+            toast(`Copied: ${fullId}`);
         });
     }
 
