@@ -3899,16 +3899,16 @@ ${card.design || 'None'}
             const textarea = form.querySelector(`#${targetId}`);
             const preview = form.querySelector(`#${targetId}-preview`);
 
-            if (textarea.style.display !== "none") {
+            if (!textarea.classList.contains("hidden")) {
                 // Switch to Preview
                 preview.innerHTML = safeRenderMarkdown(textarea.value);
-                textarea.style.display = "none";
-                preview.style.display = "block";
+                textarea.classList.add("hidden");
+                preview.classList.remove("hidden");
                 e.target.textContent = "Edit";
             } else {
                 // Switch to Edit
-                textarea.style.display = "block";
-                preview.style.display = "none";
+                textarea.classList.remove("hidden");
+                preview.classList.add("hidden");
                 e.target.textContent = "Preview";
             }
         };
