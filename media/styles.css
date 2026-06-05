@@ -124,7 +124,6 @@
 
 .markdown-field-preview {
     overflow-y: auto;
-    display: none;
     padding: 8px;
     border: 1px solid var(--border);
     border-radius: 10px;
