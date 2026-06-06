@@ -589,38 +589,141 @@ export class DaemonBeadsAdapter {
         return [];
       }
 
-      // Map to EnrichedCard - includes labels, assignee for better card display
-      const enrichedCards: EnrichedCard[] = issues.map((issue: unknown) => {
-        const i = issue as Record<string, unknown>;
-        return {
-          id: i.id as string,
-          title: (i.title as string) || '',
-          description: (i.description as string) || '',
-          status: (i.status as IssueStatus) || 'open',
-          priority: typeof i.priority === 'number' ? i.priority : 2,
-          issue_type: (i.issue_type as string) || 'task',
-          created_at: (i.created_at as string) || new Date().toISOString(),
-          created_by: (i.created_by as string) || 'unknown',
-          updated_at: (i.updated_at as string) || (i.created_at as string) || new Date().toISOString(),
-          closed_at: (i.closed_at as string | null) || null,
-          close_reason: (i.close_reason as string | null) || null,
-          dependency_count: (i.dependency_count as number) || 0,
-          dependent_count: (i.dependent_count as number) || 0,
-          assignee: (i.assignee as string | null) || null,
-          estimated_minutes: (i.estimated_minutes as number | null) || null,
-          labels: Array.isArray(i.labels) ? i.labels as string[] : [],
-          external_ref: (i.external_ref as string | null) || null,
-          pinned: readBoolFromMetadata(i, 'pinned'),
-          blocked_by_count: (i.blocked_by_count as number) || 0,
-          is_ready: i.status === 'open' && ((i.blocked_by_count as number) || 0) === 0
-        };
-      });
+      const enrichedCards = this.mapBdListIssuesToEnrichedCards(issues);
 
       this.output.appendLine(`[DaemonBeadsAdapter] getBoardMinimal: Loaded ${enrichedCards.length} enriched cards`);
       return enrichedCards;
     } catch (error) {
       throw new Error(`Failed to get minimal board data: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Map raw `bd list --json --all` output to EnrichedCard[], populating the
+   * four relationship fields (parent, children, blocked_by, blocks) from
+   * the per-issue top-level `parent` string and `dependencies` edge array.
+   * `bd list` output uses a different shape than `bd show` — edges carry
+   * `{ issue_id, depends_on_id, type }` and there is no `dependents` field —
+   * so children / blocks are derived by reverse-indexing all issues' own
+   * `dependencies` arrays.
+   */
+  private mapBdListIssuesToEnrichedCards(issuesRaw: unknown[]): EnrichedCard[] {
+    const issues = issuesRaw as Record<string, unknown>[];
+
+    // Title / metadata index for resolving DependencyInfo titles by id.
+    const issueById = new Map<string, Record<string, unknown>>();
+    for (const i of issues) {
+      const id = i.id;
+      if (typeof id === 'string') {
+        issueById.set(id, i);
+      }
+    }
+
+    const makeRef = (id: string): DependencyInfo => {
+      const ref = issueById.get(id);
+      return {
+        id,
+        title: (ref?.title as string) || id,
+        created_at: ref?.created_at as string | undefined,
+        created_by: (ref?.created_by as string) || 'unknown'
+      };
+    };
+
+    // Reverse indices: depends_on_id -> issues that point AT it.
+    const childrenByParentId = new Map<string, DependencyInfo[]>();
+    const blocksByBlockerId = new Map<string, DependencyInfo[]>();
+
+    for (const i of issues) {
+      const deps = i.dependencies;
+      if (!Array.isArray(deps)) {
+        continue;
+      }
+      for (const d of deps) {
+        const dep = d as Record<string, unknown>;
+        const sourceId = dep.issue_id as string | undefined;
+        const targetId = dep.depends_on_id as string | undefined;
+        if (!sourceId || !targetId) {
+          continue;
+        }
+        const type = dep.type;
+        if (type === 'parent-child') {
+          // source is child of target
+          const arr = childrenByParentId.get(targetId) || [];
+          arr.push(makeRef(sourceId));
+          childrenByParentId.set(targetId, arr);
+        } else if (type === 'blocks') {
+          // source is blocked by target → target blocks source
+          const arr = blocksByBlockerId.get(targetId) || [];
+          arr.push(makeRef(sourceId));
+          blocksByBlockerId.set(targetId, arr);
+        }
+      }
+    }
+
+    return issues.map((i: Record<string, unknown>) => {
+      const id = i.id as string;
+
+      // parent: prefer the top-level `parent` string from bd list; fall back
+      // to the parent-child edge in this issue's own `dependencies` array.
+      let parent: DependencyInfo | undefined;
+      let parentId: string | undefined;
+      if (typeof i.parent === 'string' && i.parent.length > 0) {
+        parentId = i.parent;
+      } else if (Array.isArray(i.dependencies)) {
+        for (const d of i.dependencies) {
+          const dep = d as Record<string, unknown>;
+          if (dep.type === 'parent-child' && typeof dep.depends_on_id === 'string' && dep.depends_on_id !== id) {
+            parentId = dep.depends_on_id;
+            break;
+          }
+        }
+      }
+      if (parentId) {
+        parent = makeRef(parentId);
+      }
+
+      // blocked_by: walk this issue's own `dependencies` array for
+      // type='blocks' edges.
+      const blockedBy: DependencyInfo[] = [];
+      if (Array.isArray(i.dependencies)) {
+        for (const d of i.dependencies) {
+          const dep = d as Record<string, unknown>;
+          if (dep.type === 'blocks' && typeof dep.depends_on_id === 'string' && dep.depends_on_id !== id) {
+            blockedBy.push(makeRef(dep.depends_on_id));
+          }
+        }
+      }
+
+      const children = childrenByParentId.get(id);
+      const blocks = blocksByBlockerId.get(id);
+
+      return {
+        id,
+        title: (i.title as string) || '',
+        description: (i.description as string) || '',
+        status: (i.status as IssueStatus) || 'open',
+        priority: typeof i.priority === 'number' ? i.priority : 2,
+        issue_type: (i.issue_type as string) || 'task',
+        created_at: (i.created_at as string) || new Date().toISOString(),
+        created_by: (i.created_by as string) || 'unknown',
+        updated_at: (i.updated_at as string) || (i.created_at as string) || new Date().toISOString(),
+        closed_at: (i.closed_at as string | null) || null,
+        close_reason: (i.close_reason as string | null) || null,
+        dependency_count: (i.dependency_count as number) || 0,
+        dependent_count: (i.dependent_count as number) || 0,
+        assignee: (i.assignee as string | null) || null,
+        estimated_minutes: (i.estimated_minutes as number | null) || null,
+        labels: Array.isArray(i.labels) ? i.labels as string[] : [],
+        external_ref: (i.external_ref as string | null) || null,
+        pinned: readBoolFromMetadata(i, 'pinned'),
+        blocked_by_count: (i.blocked_by_count as number) || 0,
+        is_ready: i.status === 'open' && ((i.blocked_by_count as number) || 0) === 0,
+        parent,
+        children: children && children.length > 0 ? children : undefined,
+        blocked_by: blockedBy.length > 0 ? blockedBy : undefined,
+        blocks: blocks && blocks.length > 0 ? blocks : undefined
+      };
+    });
   }
 
   /**
@@ -1351,73 +1454,18 @@ export class DaemonBeadsAdapter {
    */
   private mapIssuesToBoardData(issues: unknown[]): BoardData {
     const cards: BoardCard[] = [];
-    
-    // Build dependency maps from dependents structure
-    // Note: bd show returns "dependents" which are issues that depend on THIS issue
-    const parentMap = new Map<string, DependencyInfo>(); // Maps child_id -> parent_info
-    const childrenMap = new Map<string, DependencyInfo[]>(); // Maps parent_id -> children_info[]
-    const blockedByMap = new Map<string, DependencyInfo[]>(); // Maps issue_id -> blocker_info[]
-    const blocksMap = new Map<string, DependencyInfo[]>(); // Maps blocker_id -> blocked_info[]
 
-    // First pass: build dependency maps
+    // Derive each card's relationships from its OWN dependencies/dependents
+    // arrays (the same source getIssueFull uses). Cross-issue maps would
+    // miss relationships whose other side is in a different column slice.
     for (const i of issues) {
       const issue = i as Record<string, unknown>;
-      if (issue.dependents && Array.isArray(issue.dependents)) {
-        for (const d of issue.dependents) {
-          const dependent = d as Record<string, unknown>;
-          const dependentInfo: DependencyInfo = {
-            id: dependent.id as string,
-            title: dependent.title as string,
-            created_at: dependent.created_at as string,
-            created_by: (dependent.created_by as string) || 'unknown',
-            metadata: dependent.metadata as string | undefined,
-            thread_id: dependent.thread_id as string | undefined
-          };
 
-          if (dependent.dependency_type === 'parent-child') {
-            // This issue (issue) is the PARENT
-            // The dependent is the CHILD
-            // So: child.parent = this issue, and this issue.children includes child
+      const parent = this.extractParentDependency(issue);
+      const children = this.extractChildrenDependencies(issue);
+      const blockedBy = this.extractBlockedByDependencies(issue);
+      const blocks = this.extractBlocksDependencies(issue);
 
-            parentMap.set(dependent.id as string, {
-              id: issue.id as string,
-              title: issue.title as string,
-              created_at: issue.created_at as string,
-              created_by: (issue.created_by as string) || 'unknown',
-              metadata: issue.metadata as string | undefined,
-              thread_id: issue.thread_id as string | undefined
-            });
-
-            const siblings = childrenMap.get(issue.id as string) || [];
-            siblings.push(dependentInfo);
-            childrenMap.set(issue.id as string, siblings);
-          } else if (dependent.dependency_type === 'blocks') {
-            // This issue (issue) BLOCKS the dependent
-            // So: dependent.blocked_by includes this issue, and this issue.blocks includes dependent
-
-            const blockers = blockedByMap.get(dependent.id as string) || [];
-            blockers.push({
-              id: issue.id as string,
-              title: issue.title as string,
-              created_at: issue.created_at as string,
-              created_by: (issue.created_by as string) || 'unknown',
-              metadata: issue.metadata as string | undefined,
-              thread_id: issue.thread_id as string | undefined
-            });
-            blockedByMap.set(dependent.id as string, blockers);
-
-            const blocked = blocksMap.get(issue.id as string) || [];
-            blocked.push(dependentInfo);
-            blocksMap.set(issue.id as string, blocked);
-          }
-        }
-      }
-    }
-
-    // Second pass: create cards with relationships
-    for (const i of issues) {
-      const issue = i as Record<string, unknown>;
-      const blockedBy = blockedByMap.get(issue.id as string) || [];
       const isReady = issue.status === 'open' && blockedBy.length === 0;
 
       // Map labels
@@ -1470,10 +1518,10 @@ export class DaemonBeadsAdapter {
         await_id: (issue.await_id as string | null) || null,
         timeout_ns: (issue.timeout_ns as number | null) || null,
         waiters: (issue.waiters as string | null) || null,
-        parent: parentMap.get(issue.id as string),
-        children: childrenMap.get(issue.id as string),
+        parent,
+        children: children.length > 0 ? children : undefined,
         blocked_by: blockedBy.length > 0 ? blockedBy : undefined,
-        blocks: blocksMap.get(issue.id as string),
+        blocks: blocks.length > 0 ? blocks : undefined,
         comments
       };
 

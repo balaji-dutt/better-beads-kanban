@@ -84,6 +84,14 @@ export interface EnrichedCard extends MinimalCard {
   pinned?: boolean;
   blocked_by_count?: number;
   is_ready?: boolean;
+
+  // Relationships derived from `bd list --json --all` so the kanban card
+  // can render the `↳ parent` affordance (and future child / blocker
+  // affordances) without a per-card `bd show` round-trip.
+  parent?: DependencyInfo;
+  children?: DependencyInfo[];
+  blocks?: DependencyInfo[];
+  blocked_by?: DependencyInfo[];
 }
 
 /**
