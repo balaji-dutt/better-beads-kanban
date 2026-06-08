@@ -3,6 +3,7 @@ import { draggable } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { GraphView } from './graph-view.js';
+import { buildRelationshipBadges } from './cardRelationships';
 
 const vscode = acquireVsCodeApi();
 
@@ -1289,12 +1290,9 @@ function renderKanban() {
                 badges.push({ text: `⏱ ${timeStr}`, cls: 'badge-estimate' });
             }
 
-            // Blocked By logic
-            if (card.blocked_by && card.blocked_by.length > 0) {
-                badges.push({ text: `blocked by ${card.blocked_by.length}`, cls: 'badge-blocked' });
-            } else if ((card.blocked_by_count || 0) > 0) {
-                badges.push({ text: `blocked:${card.blocked_by_count}`, cls: 'badge-blocked' });
-            }
+            // Relationship affordances: blocked_by / blocks / children.
+            // Parent is rendered separately as the `.cardParent` line above the title.
+            badges.push(...buildRelationshipBadges(card));
 
             if (card.external_ref) badges.push({ text: card.external_ref });
             for (const l of (card.labels || []).slice(0, 4)) badges.push({ text: `#${l}` });
@@ -1331,7 +1329,7 @@ function renderKanban() {
             const htmlContent = `
         ${parentHtml}
         <div class="cardTitle">${escapeHtml(card.title)}</div>
-        <div class="badges">${badges.map(b => `<span class="badge ${sanitizeClassName(b.cls || '')}">${escapeHtml(b.text)}</span>`).join("")}</div>
+        <div class="badges">${badges.map(b => `<span class="badge ${sanitizeClassName(b.cls || '')}"${b.title ? ` title="${escapeHtml(b.title)}"` : ''}>${escapeHtml(b.text)}</span>`).join("")}</div>
       `;
             el.innerHTML = DOMPurify.sanitize(htmlContent, purifyConfig);
 
