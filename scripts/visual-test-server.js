@@ -105,7 +105,11 @@ function generateMockBoardData() {
       external_ref: 'PROJ-101',
       pinned: true,
       blocked_by_count: 0,
-      is_ready: true
+      is_ready: true,
+      children: [
+        { id: 'mock-000002', title: 'This is an extremely long title that tests how the card layout handles overflow when a user enters a very verbose and detailed issue title that goes well beyond what would normally fit in the card width' },
+        { id: 'mock-000005', title: 'Update API documentation' }
+      ]
     },
     {
       id: 'mock-000002',
@@ -193,7 +197,10 @@ function generateMockBoardData() {
       external_ref: 'PROJ-205',
       pinned: false,
       blocked_by_count: 0,
-      is_ready: true
+      is_ready: true,
+      blocks: [
+        { id: 'mock-000010', title: 'Deploy to production' }
+      ]
     },
 
     // --- In Progress column (status=in_progress) ---
@@ -307,7 +314,12 @@ function generateMockBoardData() {
       external_ref: 'PROJ-200',
       pinned: true,
       blocked_by_count: 3,
-      is_ready: false
+      is_ready: false,
+      blocked_by: [
+        { id: 'mock-000005', title: 'Update API documentation' },
+        { id: 'mock-000006', title: 'Refactor database connection pooling' },
+        { id: 'mock-000007', title: 'Design new dashboard layout' }
+      ]
     },
     {
       id: 'mock-000011',
