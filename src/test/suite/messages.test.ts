@@ -5,7 +5,8 @@ import {
     CommentAddSchema,
     LabelSchema,
     DependencySchema,
-    IssueIdSchema
+    IssueIdSchema,
+    UIStateSchema
 } from '../../types';
 
 suite('Message Validation Tests', () => {
@@ -174,5 +175,90 @@ suite('Message Validation Tests', () => {
             const result = IssueIdSchema.safeParse(id);
             assert.ok(!result.success, `ID "${id}" should fail validation`);
         }
+    });
+
+    test('UIStateSchema: Empty object passes (all fields optional)', () => {
+        const result = UIStateSchema.safeParse({});
+        assert.ok(result.success, 'Empty UI state should pass validation');
+    });
+
+    test('UIStateSchema: Full valid payload passes', () => {
+        const valid = {
+            viewMode: 'table',
+            collapsedColumns: ['ready', 'blocked'],
+            tableSorting: [{ id: 'title', dir: 'asc' }],
+            tableColumnVisibility: { type: true, priority: false },
+            tableColumnOrder: ['id', 'title', 'priority'],
+            tableFilters: { search: 'foo', labels: ['bug'] }
+        };
+        const result = UIStateSchema.safeParse(valid);
+        assert.ok(result.success, 'Valid full UI state should pass validation');
+    });
+
+    test('UIStateSchema: Rejects invalid viewMode', () => {
+        const invalid = { viewMode: 'list' };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'Unknown viewMode should fail validation');
+    });
+
+    test('UIStateSchema: Rejects invalid sort direction', () => {
+        const invalid = { tableSorting: [{ id: 'title', dir: 'sideways' }] };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'Unknown sort direction should fail validation');
+    });
+
+    test('UIStateSchema: Rejects tableSorting entry missing id', () => {
+        const invalid = { tableSorting: [{ dir: 'asc' }] };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'tableSorting entry without id should fail validation');
+    });
+
+    test('UIStateSchema: Caps tableSorting at 5 entries', () => {
+        const six = Array.from({ length: 6 }, (_, i) => ({ id: `col${i}`, dir: 'asc' as const }));
+        const result = UIStateSchema.safeParse({ tableSorting: six });
+        assert.ok(!result.success, 'tableSorting with 6 entries should fail (max 5)');
+    });
+
+    test('UIStateSchema: Caps collapsedColumns at 20 entries', () => {
+        const twentyOne = Array.from({ length: 21 }, (_, i) => `c${i}`);
+        const result = UIStateSchema.safeParse({ collapsedColumns: twentyOne });
+        assert.ok(!result.success, 'collapsedColumns with 21 entries should fail (max 20)');
+    });
+
+    test('UIStateSchema: Rejects collapsedColumns containing non-string', () => {
+        const invalid = { collapsedColumns: ['ready', 42] };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'collapsedColumns with non-string entry should fail');
+    });
+
+    test('UIStateSchema: Rejects tableColumnVisibility with non-boolean values', () => {
+        const invalid = { tableColumnVisibility: { type: 'yes' } };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'tableColumnVisibility values must be boolean');
+    });
+
+    test('UIStateSchema: tableFilters is permissive (forward-compat with shape changes)', () => {
+        // Filter shape may evolve; current schema accepts any record value.
+        const flexible = { tableFilters: { priority: ['1', '2'], assignee: 'alice' } };
+        const result = UIStateSchema.safeParse(flexible);
+        assert.ok(result.success, 'tableFilters should accept arbitrary value shapes');
+    });
+
+    test('UIStateSchema: topBarFilters accepts arrays of selected values', () => {
+        const valid = { topBarFilters: { priority: ['0', '1'], type: ['bug'], status: ['open'] } };
+        const result = UIStateSchema.safeParse(valid);
+        assert.ok(result.success, 'topBarFilters with valid arrays should pass');
+    });
+
+    test('UIStateSchema: topBarFilters accepts empty arrays (means "All")', () => {
+        const valid = { topBarFilters: { priority: [], type: [], status: [] } };
+        const result = UIStateSchema.safeParse(valid);
+        assert.ok(result.success, 'topBarFilters with empty arrays should pass');
+    });
+
+    test('UIStateSchema: topBarFilters rejects non-array entries', () => {
+        const invalid = { topBarFilters: { status: 'open' } };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'topBarFilters entries must be arrays');
     });
 });
