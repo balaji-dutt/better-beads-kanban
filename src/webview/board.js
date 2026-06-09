@@ -213,6 +213,7 @@ if (filterPriorityBtn && filterPriorityDropdown) {
             updatePriorityLabel();
             // Use debounced render to prevent excessive re-renders
             debouncedRender();
+            saveState();
         });
     });
 
@@ -267,6 +268,7 @@ if (filterTypeBtn && filterTypeDropdown) {
             updateTypeLabel();
             // Use debounced render to prevent excessive re-renders
             debouncedRender();
+            saveState();
         });
     });
 
@@ -321,6 +323,7 @@ if (filterStatusBtn && filterStatusDropdown) {
             updateStatusLabel();
             // Use debounced render to prevent excessive re-renders
             debouncedRender();
+            saveState();
         });
     });
 
@@ -446,8 +449,13 @@ let graphState = {
 let isRenderingGraph = false; // Guard to prevent concurrent graph renders
 
 // Table-specific state
+// Default sort is updated_at descending; written into sorting so the column
+// header indicator renders identically to a user-chosen sort.
+const DEFAULT_TABLE_SORTING = [{ id: 'updated_at', dir: 'desc' }];
 let tableState = {
-  sorting: vscodeState.tableSorting || [], // Array of {id, dir: 'asc'|'desc'}
+  sorting: (Array.isArray(vscodeState.tableSorting) && vscodeState.tableSorting.length > 0)
+    ? vscodeState.tableSorting
+    : DEFAULT_TABLE_SORTING.slice(),
   columnVisibility: vscodeState.tableColumnVisibility || {},
   columnOrder: vscodeState.tableColumnOrder || [],
   filters: vscodeState.tableFilters || {} // Additional table filters (status, assignee, labels)
@@ -596,22 +604,106 @@ const tableColumns = [
   }
 ];
 
-// Helper to persist all UI state
+// Read toolbar-filter dropdown selections (priority/type/status). Each returns
+// the array of non-"All" checked values; an empty array means "All" is selected.
+function getTopBarFilterValues() {
+    const readChecked = (dropdown) => {
+        if (!dropdown) { return []; }
+        return Array.from(dropdown.querySelectorAll('input[type="checkbox"]:checked'))
+            .map(cb => cb.value)
+            .filter(v => v !== '');
+    };
+    return {
+        priority: readChecked(filterPriorityDropdown),
+        type: readChecked(filterTypeDropdown),
+        status: readChecked(filterStatusDropdown)
+    };
+}
+
+// Apply persisted toolbar-filter values back to the dropdown checkboxes and
+// refresh their visible labels. Used during cold-start restore.
+function applyTopBarFilters(filters) {
+    if (!filters || typeof filters !== 'object') { return; }
+    const applyDropdownFilter = (dropdown, values, updateLabel) => {
+        if (!dropdown || !Array.isArray(values)) { return; }
+        const valueSet = new Set(values.filter(v => typeof v === 'string'));
+        const allCheckbox = dropdown.querySelector('input[value=""]');
+        const boxes = dropdown.querySelectorAll('input[type="checkbox"]');
+        if (valueSet.size === 0) {
+            boxes.forEach(cb => { cb.checked = cb.value === ''; });
+        } else {
+            if (allCheckbox) { allCheckbox.checked = false; }
+            boxes.forEach(cb => { if (cb.value !== '') { cb.checked = valueSet.has(cb.value); } });
+        }
+        if (typeof updateLabel === 'function') { updateLabel(); }
+    };
+    applyDropdownFilter(filterPriorityDropdown, filters.priority, updatePriorityLabel);
+    applyDropdownFilter(filterTypeDropdown, filters.type, updateTypeLabel);
+    applyDropdownFilter(filterStatusDropdown, filters.status, updateStatusLabel);
+}
+
+// Helper to persist all UI state.
+// Writes to vscode.setState for fast same-session round-trips AND posts to the
+// extension host for cross-session persistence via context.workspaceState. The
+// post is fire-and-forget — no pendingRequests entry is registered, so any
+// mutation.ok / mutation.error response harmlessly misses.
 function saveState() {
-    vscode.setState({
-        ...vscode.getState(),
+    const payload = {
         collapsedColumns: [...collapsedColumns],
         viewMode: viewMode,
         tableSorting: tableState.sorting,
         tableColumnVisibility: tableState.columnVisibility,
         tableColumnOrder: tableState.columnOrder,
-        tableFilters: tableState.filters
+        tableFilters: tableState.filters,
+        topBarFilters: getTopBarFilterValues()
+    };
+    vscode.setState({
+        ...vscode.getState(),
+        ...payload
+    });
+    vscode.postMessage({
+        type: 'state.uiState',
+        requestId: `state.uiState-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        payload
     });
 }
 
 // Legacy function name for backward compatibility
 function saveCollapsedColumnsState() {
     saveState();
+}
+
+// Apply persisted UI state delivered by the extension on board.data / board.minimal.
+// The extension has already Zod-validated the payload, but the webview re-checks
+// types defensively because board.data is also constructed by adapter paths that
+// don't run the schema (e.g., adapter.getBoard() shape).
+function applyPersistedUIState(uiState) {
+    if (!uiState || typeof uiState !== 'object') { return; }
+    if (uiState.viewMode === 'kanban' || uiState.viewMode === 'table' || uiState.viewMode === 'graph') {
+        viewMode = uiState.viewMode;
+        syncViewModeButtons();
+    }
+    if (Array.isArray(uiState.collapsedColumns)) {
+        collapsedColumns.clear();
+        for (const c of uiState.collapsedColumns) {
+            if (typeof c === 'string') { collapsedColumns.add(c); }
+        }
+    }
+    if (Array.isArray(uiState.tableSorting) && uiState.tableSorting.length > 0) {
+        tableState.sorting = uiState.tableSorting;
+    }
+    if (uiState.tableColumnVisibility && typeof uiState.tableColumnVisibility === 'object') {
+        tableState.columnVisibility = uiState.tableColumnVisibility;
+    }
+    if (Array.isArray(uiState.tableColumnOrder)) {
+        tableState.columnOrder = uiState.tableColumnOrder;
+    }
+    if (uiState.tableFilters && typeof uiState.tableFilters === 'object') {
+        tableState.filters = uiState.tableFilters;
+    }
+    if (uiState.topBarFilters && typeof uiState.topBarFilters === 'object') {
+        applyTopBarFilters(uiState.topBarFilters);
+    }
 }
 let activeRequests = 0;
 
@@ -1494,16 +1586,10 @@ function loadTablePage(page = null) {
         );
     }
 
-    // Sort cards using in-memory sort (handle multi-column sorting)
-    let sortedCards = filteredCards;
-    if (tableState.sorting.length > 0) {
-        // Use first sort column (primary sort)
-        const primarySort = tableState.sorting[0];
-        sortedCards = getSortedCards(filteredCards, primarySort.id, primarySort.dir);
-    } else {
-        // Default sort by updated_at descending
-        sortedCards = getSortedCards(filteredCards, 'updated_at', 'desc');
-    }
+    // Sort cards by primary sort column (tableState.sorting is always non-empty;
+    // see DEFAULT_TABLE_SORTING).
+    const primarySort = tableState.sorting[0];
+    const sortedCards = getSortedCards(filteredCards, primarySort.id, primarySort.dir);
 
     // Calculate pagination
     const totalCount = sortedCards.length;
@@ -2155,22 +2241,29 @@ viewGraphBtn.addEventListener("click", () => {
     }
 });
 
-// Initialize view toggle buttons based on saved state
-if (viewMode === 'graph') {
-    viewGraphBtn.classList.add('active');
-    viewKanbanBtn.classList.remove('active');
-    viewTableBtn.classList.remove('active');
-    boardEl.classList.add('hidden');
-    dependencyDiagram.classList.remove('hidden');
-} else if (viewMode === 'table') {
-    viewTableBtn.classList.add('active');
-    viewKanbanBtn.classList.remove('active');
-    viewGraphBtn.classList.remove('active');
-} else {
-    viewKanbanBtn.classList.add('active');
-    viewTableBtn.classList.remove('active');
-    viewGraphBtn.classList.remove('active');
+// Sync toolbar view-toggle buttons to the current viewMode. Called once at
+// boot and again after persisted state is restored so the highlighted button
+// matches the rendered view.
+function syncViewModeButtons() {
+    if (viewMode === 'graph') {
+        viewGraphBtn.classList.add('active');
+        viewKanbanBtn.classList.remove('active');
+        viewTableBtn.classList.remove('active');
+        boardEl.classList.add('hidden');
+        dependencyDiagram.classList.remove('hidden');
+    } else if (viewMode === 'table') {
+        viewTableBtn.classList.add('active');
+        viewKanbanBtn.classList.remove('active');
+        viewGraphBtn.classList.remove('active');
+    } else {
+        viewKanbanBtn.classList.add('active');
+        viewTableBtn.classList.remove('active');
+        viewGraphBtn.classList.remove('active');
+    }
 }
+
+// Initialize view toggle buttons based on saved state
+syncViewModeButtons();
 
 // Graph control event listeners
 if (focusModeToggle) {
@@ -2327,6 +2420,7 @@ clearFiltersBtn.addEventListener("click", () => {
 
     filterSearch.value = '';
     render();
+    saveState();
 });
 
 // Keyboard shortcuts
@@ -2475,9 +2569,13 @@ window.addEventListener("message", (event) => {
         boardData = msg.payload;
         readOnly = msg.payload.readOnly || false; // Extract read-only flag
 
+        // Apply persisted UI state (sort, filters, view mode, etc.) before rendering
+        // so the first paint reflects the user's saved preferences.
+        applyPersistedUIState(msg.payload.uiState);
+
         render();
         hideLoading();
-        
+
         // Resolve any pending request waiting for board data
         if (msg.requestId && pendingRequests.has(msg.requestId)) {
             const { resolve, timeoutId } = pendingRequests.get(msg.requestId);
@@ -2543,10 +2641,14 @@ window.addEventListener("message", (event) => {
             columns: columns,
             cards: cards
         };
-        
+
+        // Apply persisted UI state before first paint so saved sort / filters /
+        // view mode are reflected immediately on fast-loading boot.
+        applyPersistedUIState(msg.payload.uiState);
+
         render();
         hideLoading();
-        
+
         // Resolve any pending request waiting for board data
         if (msg.requestId && pendingRequests.has(msg.requestId)) {
             const { resolve, timeoutId } = pendingRequests.get(msg.requestId);

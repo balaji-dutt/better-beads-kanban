@@ -161,14 +161,20 @@ WebMsg types (Webview -> Extension)
 - `issue.addDependency` / `issue.removeDependency` - Manage relationships
 - `issue.addToChat` - Send to VS Code chat
 - `issue.copyToClipboard` - Copy issue context
+- `state.uiState` - Persist UI state (sort, filters, view mode, etc.) across panel close/reopen. Payload validated by `UIStateSchema`; stored in `context.workspaceState` under key `beadsKanban.uiState`. Fire-and-forget from the webview — `mutation.ok` / `mutation.error` are returned but the webview registers no callback.
 
 ExtMsg types (Extension -> Webview)
 
-- `board.data` - Board data payload (may include columnData for incremental loading)
+- `board.data` - Board data payload (may include `columnData` for incremental loading and `uiState` for restored UI state)
+- `board.minimal` - Fast-loading minimal cards (may include `uiState` so first paint reflects saved settings)
 - `board.columnData` - Column slice payload for incremental loading
 - `mutation.ok` - Success response
 - `mutation.error` - Error response with message
 - `webview.cleanup` - Cleanup before panel disposal
+
+**Persisted UI state (`state.uiState` / `beadsKanban.uiState`)**
+
+The webview calls `saveState()` on every relevant UI change (sort click, column visibility toggle, column-order reset, view-mode switch). Each call writes to `vscode.setState` for fast in-session round-trips AND posts a `state.uiState` message to the extension, which validates with `UIStateSchema` and writes to `context.workspaceState`. On `board.load` / `board.refresh` (and on `board.loadMinimal` and `repo.select`), the extension reads `workspaceState`, re-validates defensively, and attaches the result as `payload.uiState` so the webview can apply it before first render. Persisted values win over `vscode.getState()`. The workspaceState key is `beadsKanban.uiState`, following the same naming convention as `beadsRepoPath`.
 
 ### Database Schema
 

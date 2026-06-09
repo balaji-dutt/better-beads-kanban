@@ -220,6 +220,10 @@ export interface BoardData {
   columnData?: ColumnDataMap;
   // Read-only mode flag - when true, webview should disable all mutation controls
   readOnly?: boolean;
+  // Persisted UI state from context.workspaceState (sort, filters, view mode, etc.).
+  // When present, the webview applies these on receipt, taking precedence over
+  // vscode.getState() so settings survive panel close/reopen.
+  uiState?: UIState;
 }
 
 // Helper types for incremental loading
@@ -322,6 +326,31 @@ export const BoardLoadColumnSchema = z.object({
 export const BoardLoadMoreSchema = z.object({
   column: BoardColumnKeySchema
 });
+
+// Persisted UI state — mirrors the fields the webview's saveState() writes today.
+// Used for cross-session persistence via context.workspaceState (per-workspace).
+// tableFilters shape is intentionally permissive so future filter changes can land
+// without breaking persisted values stored by an older build.
+export const UIStateSchema = z.object({
+  viewMode: z.enum(['kanban', 'table', 'graph']).optional(),
+  collapsedColumns: z.array(z.string().max(50)).max(20).optional(),
+  tableSorting: z.array(z.object({
+    id: z.string().max(50),
+    dir: z.enum(['asc', 'desc'])
+  })).max(5).optional(),
+  tableColumnVisibility: z.record(z.string().max(50), z.boolean()).optional(),
+  tableColumnOrder: z.array(z.string().max(50)).max(50).optional(),
+  tableFilters: z.record(z.string().max(50), z.unknown()).optional(),
+  // Toolbar dropdown selections (Priority / Type / Status). Each entry is the
+  // array of non-"All" checked values; an empty array means "All" is selected.
+  topBarFilters: z.object({
+    priority: z.array(z.string().max(20)).max(10).optional(),
+    type: z.array(z.string().max(50)).max(20).optional(),
+    status: z.array(z.string().max(50)).max(20).optional()
+  }).optional()
+});
+
+export type UIState = z.infer<typeof UIStateSchema>;
 
 export const TableLoadPageSchema = z.object({
   filters: z.object({

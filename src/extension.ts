@@ -19,6 +19,8 @@ import {
   BoardLoadColumnSchema,
   BoardLoadMoreSchema,
   TableLoadPageSchema,
+  UIStateSchema,
+  UIState,
   ColumnDataMap,
   ColumnData,
   IssueIdSchema
@@ -42,11 +44,12 @@ type WebMsg =
   | { type: "issue.addLabel"; requestId: string; payload: { id: string; label: string } }
   | { type: "issue.removeLabel"; requestId: string; payload: { id: string; label: string } }
   | { type: "issue.addDependency"; requestId: string; payload: { id: string; otherId: string; type: 'parent-child' | 'blocks' } }
-  | { type: "issue.removeDependency"; requestId: string; payload: { id: string; otherId: string } };
+  | { type: "issue.removeDependency"; requestId: string; payload: { id: string; otherId: string } }
+  | { type: "state.uiState"; requestId: string; payload: UIState };
 
 type ExtMsg =
   | { type: "board.data"; requestId: string; payload: BoardData }
-  | { type: "board.minimal"; requestId: string; payload: { cards: MinimalCard[] } }
+  | { type: "board.minimal"; requestId: string; payload: { cards: MinimalCard[]; uiState?: UIState } }
   | { type: "board.columnData"; requestId: string; payload: { column: BoardColumnKey; cards: BoardCard[]; offset: number; totalCount: number; hasMore: boolean } }
   | { type: "table.pageData"; requestId: string; payload: { cards: BoardCard[]; offset: number; totalCount: number; hasMore: boolean } }
   | { type: "issue.full"; requestId: string; payload: { card: FullCard } }
@@ -223,6 +226,21 @@ export function activate(context: vscode.ExtensionContext) {
       }
     };
 
+    // Read persisted UI state (sort, filters, view mode, etc.) from
+    // workspaceState. Returns undefined on first run or if a corrupted payload
+    // (e.g., from a future build) fails validation — board loads stay
+    // unblocked rather than throwing on a malformed stored value.
+    const readPersistedUIState = (): UIState | undefined => {
+      const raw = context.workspaceState.get('beadsKanban.uiState');
+      if (raw === undefined) { return undefined; }
+      const parsed = UIStateSchema.safeParse(raw);
+      if (!parsed.success) {
+        output.appendLine(`[Extension] Discarding invalid persisted UI state: ${parsed.error.message}`);
+        return undefined;
+      }
+      return parsed.data;
+    };
+
     const sendBoard = async (requestId: string) => {
       if (isDisposed) {
         output.appendLine(`[Extension] Skipping sendBoard - webview is disposed`);
@@ -245,7 +263,8 @@ export function activate(context: vscode.ExtensionContext) {
 
           // Check cancellation before posting
           if (!cancellationToken.cancelled) {
-            post({ type: "board.minimal", requestId, payload: { cards } });
+            const uiState = readPersistedUIState();
+            post({ type: "board.minimal", requestId, payload: uiState ? { cards, uiState } : { cards } });
           } else {
             output.appendLine(`[Extension] Skipped posting board.minimal - operation cancelled`);
           }
@@ -336,6 +355,8 @@ export function activate(context: vscode.ExtensionContext) {
           const data = await adapter.getBoardMetadata();
           data.columnData = columnDataMap;
           data.readOnly = readOnly; // Propagate read-only mode to webview UI
+          const persistedUIState = readPersistedUIState();
+          if (persistedUIState) { data.uiState = persistedUIState; }
 
           // Validate markdown content in column cards (defense-in-depth)
           // Note: data.cards is now empty array from getBoardMetadata, actual cards are in columnData
@@ -359,6 +380,8 @@ export function activate(context: vscode.ExtensionContext) {
           output.appendLine(`[Extension] Adapter does not support incremental loading, using legacy getBoard()`);
           const data = await adapter.getBoard();
           data.readOnly = readOnly; // Propagate read-only mode to webview UI
+          const persistedUIState = readPersistedUIState();
+          if (persistedUIState) { data.uiState = persistedUIState; }
           output.appendLine(`[Extension] Got board data: ${data.cards?.length || 0} cards`);
 
           // Validate markdown content in all cards (defense-in-depth)
@@ -521,6 +544,24 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      if (msg.type === "state.uiState") {
+        try {
+          const validation = UIStateSchema.safeParse(msg.payload);
+          if (!validation.success) {
+            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid UI state: ${validation.error.message}` });
+            return;
+          }
+          await context.workspaceState.update('beadsKanban.uiState', validation.data);
+          post({ type: "mutation.ok", requestId: msg.requestId });
+        } catch (e) {
+          output.appendLine(`[Extension] Error persisting UI state: ${sanitizeError(e)}`);
+          if (!isDisposed && !cancellationToken.cancelled) {
+            post({ type: "mutation.error", requestId: msg.requestId, error: sanitizeError(e) });
+          }
+        }
+        return;
+      }
+
       if (msg.type === "board.loadColumn") {
         const { column, offset, limit } = msg.payload;
         await handleLoadColumn(msg.requestId, column, offset, limit);
@@ -551,7 +592,8 @@ export function activate(context: vscode.ExtensionContext) {
           
           // Check cancellation before posting
           if (!cancellationToken.cancelled) {
-            post({ type: "board.minimal", requestId: msg.requestId, payload: { cards } });
+            const uiState = readPersistedUIState();
+            post({ type: "board.minimal", requestId: msg.requestId, payload: uiState ? { cards, uiState } : { cards } });
           } else {
             output.appendLine(`[Extension] Skipped posting board.minimal - operation cancelled`);
           }
@@ -660,6 +702,8 @@ export function activate(context: vscode.ExtensionContext) {
             try {
               const data = await adapter.getBoard();
               data.readOnly = readOnly; // Propagate read-only mode to webview UI
+              const persistedUIState = readPersistedUIState();
+              if (persistedUIState) { data.uiState = persistedUIState; }
               post({ type: "board.data", requestId: msg.requestId, payload: data });
             } catch (err) {
               output.appendLine(`[Extension] Error loading board after repo switch: ${err}`);
