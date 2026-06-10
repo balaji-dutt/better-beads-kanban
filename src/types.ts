@@ -347,7 +347,7 @@ export const TYPE_ALL_VALUES = ['task', 'bug', 'feature', 'epic', 'chore'] as co
 // tableFilters shape is intentionally permissive so future filter changes can land
 // without breaking persisted values stored by an older build.
 export const UIStateSchema = z.object({
-  viewMode: z.enum(['kanban', 'table', 'graph']).optional(),
+  viewMode: z.enum(['kanban', 'table', 'graph', 'tree']).optional(),
   collapsedColumns: z.array(z.string().max(50)).max(20).optional(),
   tableSorting: z.array(z.object({
     id: z.string().max(50),
@@ -369,7 +369,24 @@ export const UIStateSchema = z.object({
   // come from an older build where an empty filter array meant "All" rather
   // than "None"; migrateUIState() upgrades those before they reach the
   // webview so the legacy semantics aren't carried into the new model.
-  topBarFiltersVersion: z.literal(2).optional()
+  topBarFiltersVersion: z.literal(2).optional(),
+  // Tree view sibling-sort spec. Sorting applies within each parent's
+  // children; the hierarchy itself is never reordered.
+  treeSort: z.object({
+    id: z.enum(['updated_at', 'priority', 'title', 'created_at']),
+    dir: z.enum(['asc', 'desc'])
+  }).optional(),
+  // Tree view expansion overrides, keyed by issue id. Only deviations from
+  // the depth-based default (top-level rows expanded, deeper rows collapsed)
+  // are stored, so issues that appear after the state was saved still follow
+  // the default. The webview trims this record before sending (stale ids,
+  // redundant entries, size cap) so a stored payload can never fail this
+  // validation and take the rest of the persisted UI state down with it.
+  treeExpanded: z.record(z.string().max(50), z.boolean())
+    .refine(rec => Object.keys(rec).length <= 500, {
+      message: 'treeExpanded must have at most 500 entries'
+    })
+    .optional()
 });
 
 export type UIState = z.infer<typeof UIStateSchema>;

@@ -26,6 +26,10 @@ Visualize issue relationships and dependencies with an interactive graph.
 
 ![Graph View](https://raw.githubusercontent.com/davidcforbes/beads-kanban/main/images/screenshots/graph-view.jpg)
 
+### Tree View
+
+Browse the parent/child hierarchy like `bd list`, with expandable nodes and connector guides.
+
 ### Edit Issue Form
 
 Comprehensive issue editing with all metadata fields, dependencies, and comments.
@@ -54,6 +58,17 @@ Comprehensive issue editing with all metadata fields, dependencies, and comments
 - Focus mode to explore specific issues and their dependencies
 - Drag nodes, zoom/pan controls
 - Color-coded by status with visual legend
+
+🌳 **Tree View**
+
+- Expandable parent/child hierarchy, mirroring `bd list`'s tree output
+- Connector guide lines show sibling and nesting structure at a glance
+- bd-style rows: colored status glyph, click-to-copy issue id, priority
+  and type, then the title
+- Filters and search show matching issues with their full ancestor chain
+  (non-matching ancestors are dimmed as context)
+- Sibling sort by Updated, Priority, Title, or Created at every level
+- Expansion, sort, and view choice persist across panel close/reopen
 
 🔧 **Full Issue Management**
 

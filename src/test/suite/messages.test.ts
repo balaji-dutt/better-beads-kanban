@@ -278,6 +278,73 @@ suite('Message Validation Tests', () => {
         const result = UIStateSchema.safeParse(invalid);
         assert.ok(!result.success, 'topBarFiltersVersion must be the literal 2');
     });
+
+    test('UIStateSchema: viewMode accepts tree', () => {
+        const result = UIStateSchema.safeParse({ viewMode: 'tree' });
+        assert.ok(result.success, 'viewMode tree should pass validation');
+    });
+
+    test('UIStateSchema: treeSort accepts each valid field and direction', () => {
+        for (const id of ['updated_at', 'priority', 'title', 'created_at']) {
+            for (const dir of ['asc', 'desc']) {
+                const result = UIStateSchema.safeParse({ treeSort: { id, dir } });
+                assert.ok(result.success, `treeSort { id: ${id}, dir: ${dir} } should pass`);
+            }
+        }
+    });
+
+    test('UIStateSchema: treeSort rejects unknown sort field', () => {
+        const result = UIStateSchema.safeParse({ treeSort: { id: 'status', dir: 'asc' } });
+        assert.ok(!result.success, 'treeSort with unknown field should fail validation');
+    });
+
+    test('UIStateSchema: treeSort rejects unknown direction', () => {
+        const result = UIStateSchema.safeParse({ treeSort: { id: 'updated_at', dir: 'sideways' } });
+        assert.ok(!result.success, 'treeSort with unknown direction should fail validation');
+    });
+
+    test('UIStateSchema: treeExpanded accepts a boolean override record', () => {
+        const valid = { treeExpanded: { 'proj-1': true, 'proj-2.1': false } };
+        const result = UIStateSchema.safeParse(valid);
+        assert.ok(result.success, 'treeExpanded with boolean values should pass');
+    });
+
+    test('UIStateSchema: treeExpanded rejects non-boolean values', () => {
+        const invalid = { treeExpanded: { 'proj-1': 'yes' } };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'treeExpanded values must be boolean');
+    });
+
+    test('UIStateSchema: treeExpanded caps at 500 entries', () => {
+        const atCap: Record<string, boolean> = {};
+        for (let i = 0; i < 500; i++) { atCap[`id-${i}`] = true; }
+        assert.ok(UIStateSchema.safeParse({ treeExpanded: atCap }).success,
+            'treeExpanded with exactly 500 entries should pass');
+        const overCap = { ...atCap, 'id-500': true };
+        assert.ok(!UIStateSchema.safeParse({ treeExpanded: overCap }).success,
+            'treeExpanded with 501 entries should fail (max 500)');
+    });
+
+    test('UIStateSchema: treeExpanded rejects keys longer than 50 characters', () => {
+        const longKey = 'k-' + 'x'.repeat(50);
+        const result = UIStateSchema.safeParse({ treeExpanded: { [longKey]: true } });
+        assert.ok(!result.success, 'treeExpanded keys longer than 50 chars should fail');
+    });
+
+    test('UIStateSchema: pre-tree payload still passes (backward compatibility)', () => {
+        const legacy = {
+            viewMode: 'table',
+            collapsedColumns: ['ready', 'blocked'],
+            tableSorting: [{ id: 'title', dir: 'asc' }],
+            tableColumnVisibility: { type: true, priority: false },
+            tableColumnOrder: ['id', 'title', 'priority'],
+            tableFilters: { search: 'foo', labels: ['bug'] },
+            topBarFilters: { priority: ['0'], type: ['bug'], status: ['open'] },
+            topBarFiltersVersion: 2
+        };
+        const result = UIStateSchema.safeParse(legacy);
+        assert.ok(result.success, 'Payload without tree fields should still pass');
+    });
 });
 
 suite('migrateUIState', () => {

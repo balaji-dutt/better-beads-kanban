@@ -139,6 +139,7 @@ Extension Host (TypeScript/Node.js)
 Webview (JavaScript/HTML/CSS)
 
 - `src/webview/board.js` - UI logic source; bundled with Pragmatic Drag and Drop using esbuild
+- `src/webview/treeBuilder.ts` - Pure helpers for the Tree view (hierarchy construction, filtering, sibling sort, connector structure); no DOM or vscode API so it is unit-testable, inlined into the board bundle by esbuild
 - `out/webview/board.js` - Bundled webview JavaScript with drag-and-drop functionality
 - `media/styles.css` - Theme-aware styling
 - `media/marked.min.js` - Markdown rendering
@@ -175,6 +176,10 @@ ExtMsg types (Extension -> Webview)
 **Persisted UI state (`state.uiState` / `beadsKanban.uiState`)**
 
 The webview calls `saveState()` on every relevant UI change (sort click, column visibility toggle, column-order reset, view-mode switch). Each call writes to `vscode.setState` for fast in-session round-trips AND posts a `state.uiState` message to the extension, which validates with `UIStateSchema` and writes to `context.workspaceState`. On `board.load` / `board.refresh` (and on `board.loadMinimal` and `repo.select`), the extension reads `workspaceState`, re-validates defensively, and attaches the result as `payload.uiState` so the webview can apply it before first render. Persisted values win over `vscode.getState()`. The workspaceState key is `beadsKanban.uiState`, following the same naming convention as `beadsRepoPath`.
+
+**Tree view state (`treeSort` / `treeExpanded`)**
+
+`UIStateSchema` carries two Tree-view fields. `treeSort` is a `{ id, dir }` sibling-sort spec (`updated_at` | `priority` | `title` | `created_at`; default `updated_at` desc). `treeExpanded` is a record of expansion **overrides** keyed by issue id — only deviations from the depth default (top-level rows expanded, deeper rows collapsed) are stored, so issues that appear after the state was saved still follow the default. The webview's `trimTreeExpanded()` runs inside `saveState()` and keeps every payload inside the schema bounds (max 500 entries, 50-char keys, stale ids dropped) because a payload that fails `safeParse` is discarded wholesale, taking the rest of the persisted UI state with it. `migrateUIState()` needs no awareness of these fields; they are optional and pass through untouched.
 
 **Toolbar filter shape (`topBarFilters`, versioned)**
 
@@ -237,6 +242,17 @@ Empty-state messaging is rendered in `#boardEmptyState` above the board:
 - Filtered count is zero but the Status filter is non-empty → "No issues match the current filters."
 
 The "Clear Filters" button resets to the first-load defaults (it does not push every checkbox to "All").
+
+### Tree View
+
+The fourth top-level view (`viewMode === 'tree'`, toolbar button between Table and Graph) renders the parent/child hierarchy like `bd list`'s tree output. Rows follow bd-list order, left to right: connector guides, caret, a colored status glyph (`TREE_STATUS_GLYPHS`: ○ Open, ◐ In Progress, ⊘ Blocked, ◌ Deferred, ● Closed, ✕ Tombstone, ◉ Pinned; formatted name via tooltip), a monospace click-to-copy issue id, priority and type pills, then the title (largest element, single-line ellipsis). Only the assignee pill is right-aligned. `renderTree()` in `board.js` renders into `#board` (same container pattern as the Table view, so table-only controls disappear automatically), delegating all structure decisions to the pure module `src/webview/treeBuilder.ts`:
+
+- **Structure** derives from each card's `parent` pointer only; `children[]` arrays are ignored for edge-building, which makes duplicate or dangling child references harmless. A card is a top-level row when it has no parent, its parent id is not in `cardCache` (orphan rule), or its parent edge was severed to break a cycle (deterministic visited-set walk; self-parents and cycles render every card exactly once).
+- **Filtering** follows "matches plus full ancestor chains": the displayed tree contains every card that passes `getFilteredCards()` plus all of its ancestors; non-matching ancestors render with `.tree-dimmed` (opacity) as context. Last-sibling/connector decisions are made on the *displayed* tree, so pruned branches never leave dangling guide lines.
+- **Expansion** defaults to top-level rows expanded one level, deeper rows collapsed. Carets toggle per-node overrides (persisted via `treeExpanded`, see Message Protocol). While the user has narrowed the board beyond the first-load defaults (search text, or any dropdown changed from Status=Active / Priority=All / Type=All), branches containing matches auto-expand so every matching issue stays visible; stored expansion state is not mutated. The first-load Active default itself does **not** trigger auto-expand.
+- **Connectors** are CSS-drawn (not text glyphs): `flattenVisibleRows()` emits per-row `guides: boolean[]` (one vertical passthrough guide per ancestor level that still has later siblings) and `isLast` (elbow vs tee joiner). `.tree-guide-bar` / `.tree-elbow` draw 1px lines colored `var(--vscode-tree-indentGuidesStroke, var(--vscode-widget-border, var(--border)))`. Line continuity relies on `align-self: stretch` and uniform single-line row height — `.tree-title` truncation to one line is load-bearing.
+- **Sibling sort** has its own dropdown (independent of the Table sort): Updated (default, desc) / Priority / Title / Created, applied at every level with the hierarchy preserved; ties break by id ascending. Missing priority sorts as 2, matching `getSortedCards`.
+- Clicking a row opens `openDetail(card)`; Enter/ArrowUp/ArrowDown/ArrowLeft/ArrowRight provide keyboard navigation.
 
 ### Data Adapter
 
