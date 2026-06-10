@@ -3,6 +3,14 @@ import { draggable } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { GraphView } from './graph-view.js';
+import {
+    nextFilterSelection,
+    computeFilterLabel,
+    isPresetChecked,
+    formatStatusValue,
+    formatTypeValue,
+    formatPriorityValue
+} from './filterStateMachine';
 
 const vscode = acquireVsCodeApi();
 
@@ -110,234 +118,173 @@ function setupBoardEventDelegation() {
 // Initialize event delegation
 setupBoardEventDelegation();
 
-// Custom priority filter dropdown logic
+// Inclusive-multiselect top-bar filter dropdowns (Priority / Type / Status).
+//
+// Source of truth: the `checked` state of the value rows (rows without a
+// `data-preset` attribute). Preset rows ("All" / "Active") are derived UI —
+// their checked state mirrors set-equality of the current selection against
+// the corresponding universe / subset.
+//
+// State-machine transitions live in src/webview/filterStateMachine.ts so
+// they can be unit-tested without a DOM. The code below is the glue that
+// reads/writes checkboxes and labels.
+
+const STATUS_ALL = ['open', 'in_progress', 'blocked', 'deferred', 'closed', 'tombstone', 'pinned'];
+const STATUS_ACTIVE = ['open', 'in_progress', 'blocked', 'deferred'];
+const PRIORITY_ALL = ['0', '1', '2', '3'];
+const TYPE_ALL = ['task', 'bug', 'feature', 'epic', 'chore'];
+
+const STATUS_UNIVERSE = {
+    prefix: 'Status',
+    allValues: STATUS_ALL,
+    activeValues: STATUS_ACTIVE,
+    formatValue: formatStatusValue
+};
+const PRIORITY_UNIVERSE = {
+    prefix: 'Priority',
+    allValues: PRIORITY_ALL,
+    formatValue: formatPriorityValue
+};
+const TYPE_UNIVERSE = {
+    prefix: 'Type',
+    allValues: TYPE_ALL,
+    formatValue: formatTypeValue
+};
+
+// Read currently-checked *value* rows (string values) for a dropdown. Preset
+// rows are skipped via the data-preset attribute.
+function readSelectedStrings(dropdown) {
+    if (!dropdown) { return []; }
+    const boxes = dropdown.querySelectorAll('input[type="checkbox"]:checked');
+    return Array.from(boxes)
+        .filter(cb => !cb.dataset.preset && cb.value !== '')
+        .map(cb => cb.value);
+}
+
+// Public getters consumed by getFilteredCards / renderTable / renderGraph.
+// Priority returns numbers for compatibility with card.priority comparisons.
 function getSelectedPriorities() {
-    if (!filterPriorityDropdown) return [];
-    const checkboxes = filterPriorityDropdown.querySelectorAll('input[type="checkbox"]:checked');
-    const values = Array.from(checkboxes).map(cb => cb.value).filter(v => v !== ''); // Filter out "All" (empty value)
-    return values.map(v => parseInt(v)); // Convert to numbers
+    return readSelectedStrings(filterPriorityDropdown).map(v => parseInt(v, 10));
+}
+
+function getSelectedTypes() {
+    return readSelectedStrings(filterTypeDropdown);
+}
+
+function getSelectedStatuses() {
+    return readSelectedStrings(filterStatusDropdown);
+}
+
+// Write the dropdown's checkbox state from a selected-values array. Both the
+// value rows and the preset rows are updated; preset rows are derived from
+// set-equality against the universe / active subset.
+function writeSelection(dropdown, universe, selected) {
+    if (!dropdown) { return; }
+    const selectedSet = new Set(selected);
+    const boxes = dropdown.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach(cb => {
+        const preset = cb.dataset.preset;
+        if (preset === 'all') {
+            cb.checked = isPresetChecked(selected, 'all', universe);
+        } else if (preset === 'active') {
+            cb.checked = isPresetChecked(selected, 'active', universe);
+        } else if (cb.value !== '') {
+            cb.checked = selectedSet.has(cb.value);
+        }
+    });
 }
 
 function updatePriorityLabel() {
-    if (!filterPriorityLabel) return;
-    const selected = getSelectedPriorities();
-    if (selected.length === 0) {
-        filterPriorityLabel.textContent = 'Priority: All';
-    } else if (selected.length === 1) {
-        filterPriorityLabel.textContent = `Priority: P${selected[0]}`;
-    } else {
-        filterPriorityLabel.textContent = `Priority: ${selected.length} selected`;
-    }
-}
-
-// Custom type filter dropdown logic
-function getSelectedTypes() {
-    if (!filterTypeDropdown) return [];
-    const checkboxes = filterTypeDropdown.querySelectorAll('input[type="checkbox"]:checked');
-    const values = Array.from(checkboxes).map(cb => cb.value).filter(v => v !== ''); // Filter out "All" (empty value)
-    return values;
+    if (!filterPriorityLabel) { return; }
+    filterPriorityLabel.textContent = computeFilterLabel(
+        readSelectedStrings(filterPriorityDropdown),
+        PRIORITY_UNIVERSE
+    );
 }
 
 function updateTypeLabel() {
-    if (!filterTypeLabel) return;
-    const selected = getSelectedTypes();
-    if (selected.length === 0) {
-        filterTypeLabel.textContent = 'Type: All';
-    } else if (selected.length === 1) {
-        // Capitalize first letter
-        const type = selected[0].charAt(0).toUpperCase() + selected[0].slice(1);
-        filterTypeLabel.textContent = `Type: ${type}`;
-    } else {
-        filterTypeLabel.textContent = `Type: ${selected.length} selected`;
-    }
-}
-
-// Custom status filter dropdown logic
-function getSelectedStatuses() {
-    if (!filterStatusDropdown) return [];
-    const checkboxes = filterStatusDropdown.querySelectorAll('input[type="checkbox"]:checked');
-    const values = Array.from(checkboxes).map(cb => cb.value).filter(v => v !== ''); // Filter out "All" (empty value)
-    return values;
+    if (!filterTypeLabel) { return; }
+    filterTypeLabel.textContent = computeFilterLabel(
+        readSelectedStrings(filterTypeDropdown),
+        TYPE_UNIVERSE
+    );
 }
 
 function updateStatusLabel() {
-    if (!filterStatusLabel) return;
-    const selected = getSelectedStatuses();
-    if (selected.length === 0) {
-        filterStatusLabel.textContent = 'Status: All';
-    } else if (selected.length === 1) {
-        // Capitalize first letter
-        const status = selected[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        filterStatusLabel.textContent = `Status: ${status}`;
+    if (!filterStatusLabel) { return; }
+    filterStatusLabel.textContent = computeFilterLabel(
+        readSelectedStrings(filterStatusDropdown),
+        STATUS_UNIVERSE
+    );
+}
+
+// Handle a click on any checkbox in a filter dropdown.
+//
+// Subtle ordering: the browser flips a checkbox's `checked` attr BEFORE
+// firing `change`, so reading the value rows here gives the post-click DOM
+// state. For an individual-value click that's exactly the new selection
+// (the browser has already done the add/remove). For a preset row click
+// the value rows weren't touched by the browser, so the post-click DOM
+// state still IS the pre-click selection — which is what the state-machine
+// table needs to evaluate transitions like "All checked → clear".
+function handleFilterClick(dropdown, universe, updateLabel, checkbox) {
+    const preset = checkbox.dataset.preset;
+    let next;
+    if (preset === 'all' || preset === 'active') {
+        // Pre-click selection: value rows are unaffected by a preset click.
+        const before = readSelectedStrings(dropdown);
+        next = nextFilterSelection(before, { kind: 'preset', preset }, universe);
     } else {
-        filterStatusLabel.textContent = `Status: ${selected.length} selected`;
+        // Post-click selection IS the new selection. Reorder to universe
+        // order for deterministic persistence.
+        const after = new Set(readSelectedStrings(dropdown));
+        next = universe.allValues.filter(v => after.has(v));
     }
+    writeSelection(dropdown, universe, next);
+    updateLabel();
+    debouncedRender();
+    saveState();
 }
 
-// Toggle dropdown on button click - Priority Filter
-if (filterPriorityBtn && filterPriorityDropdown) {
-    filterPriorityBtn.addEventListener('click', (e) => {
+function wireFilterDropdown(btn, dropdown, universe, updateLabel) {
+    if (!btn || !dropdown) { return; }
+    btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        filterPriorityDropdown.classList.toggle('hidden');
+        dropdown.classList.toggle('hidden');
     });
-
-    // Update label and trigger filter when checkbox changes
-    filterPriorityDropdown.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const allCheckbox = filterPriorityDropdown.querySelector('input[value=""]');
-
-            if (checkbox.value === '') {
-                // "All" checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck all other checkboxes
-                    filterPriorityDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                        if (cb.value !== '') cb.checked = false;
-                    });
-                }
-            } else {
-                // A specific priority checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck "All"
-                    if (allCheckbox) allCheckbox.checked = false;
-                } else {
-                    // If no checkboxes are checked, check "All"
-                    const anyChecked = Array.from(filterPriorityDropdown.querySelectorAll('input[type="checkbox"]'))
-                        .some(cb => cb.value !== '' && cb.checked);
-                    if (!anyChecked && allCheckbox) {
-                        allCheckbox.checked = true;
-                    }
-                }
-            }
-
-            updatePriorityLabel();
-            // Use debounced render to prevent excessive re-renders
-            debouncedRender();
-            saveState();
-        });
+    // Single delegated listener — picks up clicks on the input element (the
+    // browser fires `change` after the checked attribute flips, but we use
+    // `change` here so keyboard activation works the same as mouse clicks).
+    dropdown.addEventListener('change', (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') { return; }
+        handleFilterClick(dropdown, universe, updateLabel, target);
     });
-
-    // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        if (!filterPriorityDropdown.contains(e.target) && e.target !== filterPriorityBtn) {
-            filterPriorityDropdown.classList.add('hidden');
+        if (!dropdown.contains(e.target) && e.target !== btn) {
+            dropdown.classList.add('hidden');
         }
     });
-
-    // Prevent dropdown from closing when clicking inside it
-    filterPriorityDropdown.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
+    dropdown.addEventListener('click', (e) => { e.stopPropagation(); });
 }
 
-// Toggle dropdown on button click - Type Filter
-if (filterTypeBtn && filterTypeDropdown) {
-    filterTypeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        filterTypeDropdown.classList.toggle('hidden');
-    });
+wireFilterDropdown(filterPriorityBtn, filterPriorityDropdown, PRIORITY_UNIVERSE, updatePriorityLabel);
+wireFilterDropdown(filterTypeBtn, filterTypeDropdown, TYPE_UNIVERSE, updateTypeLabel);
+wireFilterDropdown(filterStatusBtn, filterStatusDropdown, STATUS_UNIVERSE, updateStatusLabel);
 
-    // Update label and trigger filter when checkbox changes
-    filterTypeDropdown.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const allCheckbox = filterTypeDropdown.querySelector('input[value=""]');
-
-            if (checkbox.value === '') {
-                // "All" checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck all other checkboxes
-                    filterTypeDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                        if (cb.value !== '') cb.checked = false;
-                    });
-                }
-            } else {
-                // A specific type checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck "All"
-                    if (allCheckbox) allCheckbox.checked = false;
-                } else {
-                    // If no checkboxes are checked, check "All"
-                    const anyChecked = Array.from(filterTypeDropdown.querySelectorAll('input[type="checkbox"]'))
-                        .some(cb => cb.value !== '' && cb.checked);
-                    if (!anyChecked && allCheckbox) {
-                        allCheckbox.checked = true;
-                    }
-                }
-            }
-
-            updateTypeLabel();
-            // Use debounced render to prevent excessive re-renders
-            debouncedRender();
-            saveState();
-        });
-    });
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!filterTypeDropdown.contains(e.target) && e.target !== filterTypeBtn) {
-            filterTypeDropdown.classList.add('hidden');
-        }
-    });
-
-    // Prevent dropdown from closing when clicking inside it
-    filterTypeDropdown.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
+// Apply the first-load defaults: Status → Active, Priority → All, Type → All.
+// Called once at boot before persisted state arrives (so persisted state
+// still wins) and again by the Clear Filters button.
+function initFilterDefaults() {
+    writeSelection(filterStatusDropdown, STATUS_UNIVERSE, [...STATUS_ACTIVE]);
+    writeSelection(filterPriorityDropdown, PRIORITY_UNIVERSE, [...PRIORITY_ALL]);
+    writeSelection(filterTypeDropdown, TYPE_UNIVERSE, [...TYPE_ALL]);
+    updateStatusLabel();
+    updatePriorityLabel();
+    updateTypeLabel();
 }
 
-// Toggle dropdown on button click - Status Filter
-if (filterStatusBtn && filterStatusDropdown) {
-    filterStatusBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        filterStatusDropdown.classList.toggle('hidden');
-    });
-
-    // Update label and trigger filter when checkbox changes
-    filterStatusDropdown.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const allCheckbox = filterStatusDropdown.querySelector('input[value=""]');
-
-            if (checkbox.value === '') {
-                // "All" checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck all other checkboxes
-                    filterStatusDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                        if (cb.value !== '') cb.checked = false;
-                    });
-                }
-            } else {
-                // A specific status checkbox was clicked
-                if (checkbox.checked) {
-                    // Uncheck "All"
-                    if (allCheckbox) allCheckbox.checked = false;
-                } else {
-                    // If no checkboxes are checked, check "All"
-                    const anyChecked = Array.from(filterStatusDropdown.querySelectorAll('input[type="checkbox"]'))
-                        .some(cb => cb.value !== '' && cb.checked);
-                    if (!anyChecked && allCheckbox) {
-                        allCheckbox.checked = true;
-                    }
-                }
-            }
-
-            updateStatusLabel();
-            // Use debounced render to prevent excessive re-renders
-            debouncedRender();
-            saveState();
-        });
-    });
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!filterStatusDropdown.contains(e.target) && e.target !== filterStatusBtn) {
-            filterStatusDropdown.classList.add('hidden');
-        }
-    });
-
-    // Prevent dropdown from closing when clicking inside it
-    filterStatusDropdown.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
-}
+initFilterDefaults();
 
 const viewKanbanBtn = document.getElementById("viewKanbanBtn");
 const viewTableBtn = document.getElementById("viewTableBtn");
@@ -603,42 +550,31 @@ const tableColumns = [
   }
 ];
 
-// Read toolbar-filter dropdown selections (priority/type/status). Each returns
-// the array of non-"All" checked values; an empty array means "All" is selected.
+// Read toolbar-filter dropdown selections (priority/type/status). Under
+// inclusive-multiselect semantics the array IS the source of truth: an empty
+// array means "None selected" and the full universe means "All".
 function getTopBarFilterValues() {
-    const readChecked = (dropdown) => {
-        if (!dropdown) { return []; }
-        return Array.from(dropdown.querySelectorAll('input[type="checkbox"]:checked'))
-            .map(cb => cb.value)
-            .filter(v => v !== '');
-    };
     return {
-        priority: readChecked(filterPriorityDropdown),
-        type: readChecked(filterTypeDropdown),
-        status: readChecked(filterStatusDropdown)
+        priority: readSelectedStrings(filterPriorityDropdown),
+        type: readSelectedStrings(filterTypeDropdown),
+        status: readSelectedStrings(filterStatusDropdown)
     };
 }
 
 // Apply persisted toolbar-filter values back to the dropdown checkboxes and
-// refresh their visible labels. Used during cold-start restore.
+// refresh their visible labels. Preset rows are derived from set-equality
+// against the universe / active subset.
 function applyTopBarFilters(filters) {
     if (!filters || typeof filters !== 'object') { return; }
-    const applyDropdownFilter = (dropdown, values, updateLabel) => {
+    const applyOne = (dropdown, universe, values, updateLabel) => {
         if (!dropdown || !Array.isArray(values)) { return; }
-        const valueSet = new Set(values.filter(v => typeof v === 'string'));
-        const allCheckbox = dropdown.querySelector('input[value=""]');
-        const boxes = dropdown.querySelectorAll('input[type="checkbox"]');
-        if (valueSet.size === 0) {
-            boxes.forEach(cb => { cb.checked = cb.value === ''; });
-        } else {
-            if (allCheckbox) { allCheckbox.checked = false; }
-            boxes.forEach(cb => { if (cb.value !== '') { cb.checked = valueSet.has(cb.value); } });
-        }
+        const cleaned = values.filter(v => typeof v === 'string');
+        writeSelection(dropdown, universe, cleaned);
         if (typeof updateLabel === 'function') { updateLabel(); }
     };
-    applyDropdownFilter(filterPriorityDropdown, filters.priority, updatePriorityLabel);
-    applyDropdownFilter(filterTypeDropdown, filters.type, updateTypeLabel);
-    applyDropdownFilter(filterStatusDropdown, filters.status, updateStatusLabel);
+    applyOne(filterPriorityDropdown, PRIORITY_UNIVERSE, filters.priority, updatePriorityLabel);
+    applyOne(filterTypeDropdown, TYPE_UNIVERSE, filters.type, updateTypeLabel);
+    applyOne(filterStatusDropdown, STATUS_UNIVERSE, filters.status, updateStatusLabel);
 }
 
 // Helper to persist all UI state.
@@ -654,7 +590,8 @@ function saveState() {
         tableColumnVisibility: tableState.columnVisibility,
         tableColumnOrder: tableState.columnOrder,
         tableFilters: tableState.filters,
-        topBarFilters: getTopBarFilterValues()
+        topBarFilters: getTopBarFilterValues(),
+        topBarFiltersVersion: 2
     };
     vscode.setState({
         ...vscode.getState(),
@@ -963,37 +900,20 @@ function columnForCard(card) {
 function getFilteredCards() {
     const sVal = filterSearch?.value?.toLowerCase()?.trim() || "";
 
-    // Get selected values from custom dropdowns (multi-select)
-    const selectedPriorities = getSelectedPriorities();
-    const selectedTypes = getSelectedTypes();
-    const selectedStatuses = getSelectedStatuses();
+    // Inclusive-multiselect semantics: an empty array means "None selected",
+    // i.e. no card matches that filter. The toolbar's first-load defaults
+    // (initFilterDefaults) ensure these arrays are non-empty unless the user
+    // explicitly cleared a filter, so the all-empty case is the user's intent
+    // to see zero issues.
+    const selectedPriorities = new Set(getSelectedPriorities());
+    const selectedTypes = new Set(getSelectedTypes());
+    const selectedStatuses = new Set(getSelectedStatuses());
 
-
-    // If no filters, return all cards from cache
-    if (selectedPriorities.length === 0 && selectedTypes.length === 0 && !sVal && selectedStatuses.length === 0) {
-        return Array.from(cardCache.values());
-    }
-
-    // Filter cards in memory
     const filtered = [];
     for (const card of cardCache.values()) {
-        // Priority filter (multi-select)
-        if (selectedPriorities.length > 0 && !selectedPriorities.includes(card.priority)) {
-            continue;
-        }
-
-        // Type filter (multi-select)
-        if (selectedTypes.length > 0 && !selectedTypes.includes(card.issue_type)) {
-            continue;
-        }
-
-        // Status filter (multi-select)
-        // Filter by actual database status, not visual column mapping
-        if (selectedStatuses.length > 0) {
-            if (!selectedStatuses.includes(card.status)) {
-                continue;
-            }
-        }
+        if (!selectedPriorities.has(card.priority)) { continue; }
+        if (!selectedTypes.has(card.issue_type)) { continue; }
+        if (!selectedStatuses.has(card.status)) { continue; }
 
         // Search filter (title, description, ID, or labels)
         if (sVal !== "") {
@@ -1009,7 +929,6 @@ function getFilteredCards() {
 
         filtered.push(card);
     }
-
 
     return filtered;
 }
@@ -1134,6 +1053,33 @@ function render() {
     } else {
         renderKanban();
     }
+
+    renderEmptyStateHint();
+}
+
+// Update the empty-state hint above the board. Two distinct messages:
+//   - Specific: the Status filter is empty (None selected) — the user has
+//     explicitly chosen to show no statuses.
+//   - Generic:  status is non-empty but every card was filtered out by some
+//     combination of the other filters or the search box.
+// Hidden otherwise.
+function renderEmptyStateHint() {
+    const hint = document.getElementById('boardEmptyState');
+    if (!hint) { return; }
+    const statuses = getSelectedStatuses();
+    if (statuses.length === 0) {
+        hint.textContent = 'No statuses selected. Use the Status filter to choose what to show.';
+        hint.classList.remove('hidden');
+        return;
+    }
+    const filtered = getFilteredCards();
+    if (filtered.length === 0 && cardCache.size > 0) {
+        hint.textContent = 'No issues match the current filters.';
+        hint.classList.remove('hidden');
+        return;
+    }
+    hint.textContent = '';
+    hint.classList.add('hidden');
 }
 
 // Create debounced render function for filter changes (300ms delay)
@@ -1164,8 +1110,8 @@ function renderKanban() {
     // This handles the case where board.load (old path) is used instead of board.loadMinimal
     if (cardCache.size === 0) {
 
-        const selectedPriorities = getSelectedPriorities();
-        const selectedTypes = getSelectedTypes();
+        const selectedPriorities = new Set(getSelectedPriorities());
+        const selectedTypes = new Set(getSelectedTypes());
         const sVal = filterSearch.value.toLowerCase();
 
         for (const col of columns) {
@@ -1173,8 +1119,8 @@ function renderKanban() {
             const colCards = columnState[colKey]?.cards || [];
 
             byCol[colKey] = colCards.filter(c => {
-                if (selectedPriorities.length > 0 && !selectedPriorities.includes(c.priority)) return false;
-                if (selectedTypes.length > 0 && !selectedTypes.includes(c.issue_type)) return false;
+                if (!selectedPriorities.has(c.priority)) return false;
+                if (!selectedTypes.has(c.issue_type)) return false;
                 if (sVal !== "" && !c.title.toLowerCase().includes(sVal)) return false;
                 return true;
             });
@@ -1267,7 +1213,13 @@ function renderKanban() {
         // Show "loaded / total" format for incremental loading
         const colState = columnState[col.key];
         const filteredCount = (byCol[col.key] || []).length;
-        const hasActiveFilters = getSelectedPriorities().length > 0 || getSelectedTypes().length > 0 || getSelectedStatuses().length > 0 || filterSearch.value;
+        // Under inclusive-multiselect semantics, "active filter" means the
+        // selection is narrower than the full universe for at least one
+        // dropdown (so the count display reflects that some cards are hidden).
+        const hasActiveFilters = !isPresetChecked(readSelectedStrings(filterPriorityDropdown), 'all', PRIORITY_UNIVERSE)
+            || !isPresetChecked(readSelectedStrings(filterTypeDropdown), 'all', TYPE_UNIVERSE)
+            || !isPresetChecked(readSelectedStrings(filterStatusDropdown), 'all', STATUS_UNIVERSE)
+            || !!filterSearch.value;
 
         if (colState && colState.totalCount > colState.cards.length) {
             // Partial load: show "filtered (loaded / total)"
@@ -2388,38 +2340,10 @@ repoMenuBtn.addEventListener("click", () => {
 // Priority, Type, and Status filters use debouncedRender in checkbox handlers
 filterSearch.addEventListener("input", debouncedRender);
 
-// Clear all filters
+// Clear all filters — resets to the first-load defaults (Status → Active,
+// Priority → All, Type → All) and clears the search box.
 clearFiltersBtn.addEventListener("click", () => {
-    // Clear all priority checkboxes and check "All"
-    filterPriorityDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        if (cb.value === '') {
-            cb.checked = true; // Check "All"
-        } else {
-            cb.checked = false; // Uncheck all others
-        }
-    });
-    updatePriorityLabel();
-
-    // Clear all type checkboxes and check "All"
-    filterTypeDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        if (cb.value === '') {
-            cb.checked = true; // Check "All"
-        } else {
-            cb.checked = false; // Uncheck all others
-        }
-    });
-    updateTypeLabel();
-
-    // Clear all status checkboxes and check "All"
-    filterStatusDropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        if (cb.value === '') {
-            cb.checked = true; // Check "All"
-        } else {
-            cb.checked = false; // Uncheck all others
-        }
-    });
-    updateStatusLabel();
-
+    initFilterDefaults();
     filterSearch.value = '';
     render();
     saveState();

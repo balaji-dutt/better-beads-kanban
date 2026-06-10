@@ -447,14 +447,13 @@ function generateMockBoardData() {
       id: 'mock-000017',
       title: 'Evaluate database migration tools',
       description: 'Compare Flyway, Liquibase, and custom migration approaches',
-      status: 'closed',
+      status: 'deferred',
       priority: 2,
       issue_type: 'task',
       created_at: twoWeeksAgo,
       created_by: 'diana',
       updated_at: lastWeek,
-      closed_at: lastWeek,
-      close_reason: 'wontfix',
+      closed_at: null,
       dependency_count: 0,
       dependent_count: 0,
       assignee: 'diana',
@@ -632,11 +631,11 @@ function generateHtml() {
 '            <span class="dropdown-arrow">&#x25BC;</span>\n' +
 '          </button>\n' +
 '          <div id="filterPriorityDropdown" class="status-dropdown hidden">\n' +
-'            <label class="status-option"><input type="checkbox" value="" checked /> All</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="0" /> P0</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="1" /> P1</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="2" /> P2</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="3" /> P3</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="" data-preset="all" checked /> All</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="0" checked /> P0</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="1" checked /> P1</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="2" checked /> P2</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="3" checked /> P3</label>\n' +
 '          </div>\n' +
 '        </div>\n' +
 '        <div class="status-filter-wrapper">\n' +
@@ -645,25 +644,26 @@ function generateHtml() {
 '            <span class="dropdown-arrow">&#x25BC;</span>\n' +
 '          </button>\n' +
 '          <div id="filterTypeDropdown" class="status-dropdown hidden">\n' +
-'            <label class="status-option"><input type="checkbox" value="" checked /> All</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="task" /> Task</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="bug" /> Bug</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="feature" /> Feature</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="epic" /> Epic</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="chore" /> Chore</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="" data-preset="all" checked /> All</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="task" checked /> Task</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="bug" checked /> Bug</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="feature" checked /> Feature</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="epic" checked /> Epic</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="chore" checked /> Chore</label>\n' +
 '          </div>\n' +
 '        </div>\n' +
 '        <div class="status-filter-wrapper">\n' +
 '          <button id="filterStatusBtn" class="select status-filter-btn" type="button" title="Filter by status">\n' +
-'            <span id="filterStatusLabel">Status: All</span>\n' +
+'            <span id="filterStatusLabel">Status: Active</span>\n' +
 '            <span class="dropdown-arrow">&#x25BC;</span>\n' +
 '          </button>\n' +
 '          <div id="filterStatusDropdown" class="status-dropdown hidden">\n' +
-'            <label class="status-option"><input type="checkbox" value="" checked /> All</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="open" /> Open</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="in_progress" /> In Progress</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="blocked" /> Blocked</label>\n' +
-'            <label class="status-option"><input type="checkbox" value="deferred" /> Deferred</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="" data-preset="all" /> All</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="" data-preset="active" checked /> Active</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="open" checked /> Open</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="in_progress" checked /> In Progress</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="blocked" checked /> Blocked</label>\n' +
+'            <label class="status-option"><input type="checkbox" value="deferred" checked /> Deferred</label>\n' +
 '            <label class="status-option"><input type="checkbox" value="closed" /> Closed</label>\n' +
 '            <label class="status-option"><input type="checkbox" value="tombstone" /> Tombstone</label>\n' +
 '            <label class="status-option"><input type="checkbox" value="pinned" /> Pinned</label>\n' +
@@ -677,6 +677,7 @@ function generateHtml() {
 '  </header>\n' +
 '\n' +
 '  <main>\n' +
+'    <div id="boardEmptyState" class="empty-state-hint hidden" role="status"></div>\n' +
 '    <div id="board" class="board"></div>\n' +
 '    <div id="dependencyDiagram" class="dependency-diagram hidden">\n' +
 '      <div class="graph-sidebar">\n' +
