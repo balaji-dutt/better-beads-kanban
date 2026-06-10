@@ -7,10 +7,17 @@ import {
     nextFilterSelection,
     computeFilterLabel,
     isPresetChecked,
+    selectionEquals,
     formatStatusValue,
     formatTypeValue,
     formatPriorityValue
 } from './filterStateMachine';
+import {
+    buildDisplayTree,
+    flattenVisibleRows,
+    defaultExpanded,
+    DEFAULT_TREE_SORT
+} from './treeBuilder';
 
 const vscode = acquireVsCodeApi();
 
@@ -289,6 +296,7 @@ initFilterDefaults();
 const viewKanbanBtn = document.getElementById("viewKanbanBtn");
 const viewTableBtn = document.getElementById("viewTableBtn");
 const viewGraphBtn = document.getElementById("viewGraphBtn");
+const viewTreeBtn = document.getElementById("viewTreeBtn");
 
 // Graph view elements
 const dependencyDiagram = document.getElementById("dependencyDiagram");
@@ -381,7 +389,7 @@ detDialog.addEventListener("cancel", (event) => {
 const vscodeState = vscode.getState() || {};
 const collapsedColumns = new Set(vscodeState.collapsedColumns || []);
 
-// View mode: 'kanban' (default), 'table', or 'graph'
+// View mode: 'kanban' (default), 'table', 'graph', or 'tree'
 let viewMode = vscodeState.viewMode || 'kanban';
 
 // Initialize graph view
@@ -405,6 +413,20 @@ let tableState = {
   columnVisibility: vscodeState.tableColumnVisibility || {},
   columnOrder: vscodeState.tableColumnOrder || [],
   filters: vscodeState.tableFilters || {} // Additional table filters (status, assignee, labels)
+};
+
+// Tree-specific state. expandedOverrides holds only deviations from the
+// depth-based default (top-level expanded, deeper collapsed) keyed by issue
+// id, so issues that appear after the state was saved still follow the
+// default. Entries are re-inserted on every toggle so key order doubles as
+// a least-recently-touched list for the size cap in trimTreeExpanded().
+let treeState = {
+  sort: (vscodeState.treeSort && typeof vscodeState.treeSort === 'object')
+    ? { ...vscodeState.treeSort }
+    : { ...DEFAULT_TREE_SORT },
+  expandedOverrides: (vscodeState.treeExpanded && typeof vscodeState.treeExpanded === 'object')
+    ? { ...vscodeState.treeExpanded }
+    : {}
 };
 
 // Table column definitions
@@ -577,6 +599,32 @@ function applyTopBarFilters(filters) {
     applyOne(filterStatusDropdown, STATUS_UNIVERSE, filters.status, updateStatusLabel);
 }
 
+// Maximum treeExpanded entries / key length the UIStateSchema accepts. The
+// trim below must keep every saved payload inside these bounds — a payload
+// that fails validation is discarded wholesale on the extension side,
+// taking the rest of the persisted UI state with it.
+const TREE_EXPANDED_MAX_ENTRIES = 500;
+const TREE_EXPANDED_MAX_KEY_LENGTH = 50;
+
+// Reduce the expansion-override record to a schema-safe payload: drop keys
+// the schema would reject and overrides for issues no longer in the cache.
+// (Overrides equal to the depth default are already pruned at toggle time,
+// where the node's depth is known.) If still over the cap, keep the most
+// recently touched entries — key order is maintained as least-recently-
+// touched-first by the toggle handler.
+function trimTreeExpanded(overrides) {
+    const entries = Object.entries(overrides).filter(([id, expanded]) => {
+        if (typeof expanded !== 'boolean') { return false; }
+        if (id.length > TREE_EXPANDED_MAX_KEY_LENGTH) { return false; }
+        if (cardCache.size > 0 && !cardCache.has(id)) { return false; }
+        return true;
+    });
+    const kept = entries.length > TREE_EXPANDED_MAX_ENTRIES
+        ? entries.slice(entries.length - TREE_EXPANDED_MAX_ENTRIES)
+        : entries;
+    return Object.fromEntries(kept);
+}
+
 // Helper to persist all UI state.
 // Writes to vscode.setState for fast same-session round-trips AND posts to the
 // extension host for cross-session persistence via context.workspaceState. The
@@ -591,7 +639,9 @@ function saveState() {
         tableColumnOrder: tableState.columnOrder,
         tableFilters: tableState.filters,
         topBarFilters: getTopBarFilterValues(),
-        topBarFiltersVersion: 2
+        topBarFiltersVersion: 2,
+        treeSort: treeState.sort,
+        treeExpanded: trimTreeExpanded(treeState.expandedOverrides)
     };
     vscode.setState({
         ...vscode.getState(),
@@ -615,7 +665,7 @@ function saveCollapsedColumnsState() {
 // don't run the schema (e.g., adapter.getBoard() shape).
 function applyPersistedUIState(uiState) {
     if (!uiState || typeof uiState !== 'object') { return; }
-    if (uiState.viewMode === 'kanban' || uiState.viewMode === 'table' || uiState.viewMode === 'graph') {
+    if (uiState.viewMode === 'kanban' || uiState.viewMode === 'table' || uiState.viewMode === 'graph' || uiState.viewMode === 'tree') {
         viewMode = uiState.viewMode;
         syncViewModeButtons();
     }
@@ -639,6 +689,12 @@ function applyPersistedUIState(uiState) {
     }
     if (uiState.topBarFilters && typeof uiState.topBarFilters === 'object') {
         applyTopBarFilters(uiState.topBarFilters);
+    }
+    if (uiState.treeSort && typeof uiState.treeSort === 'object' && typeof uiState.treeSort.id === 'string') {
+        treeState.sort = { ...uiState.treeSort };
+    }
+    if (uiState.treeExpanded && typeof uiState.treeExpanded === 'object' && !Array.isArray(uiState.treeExpanded)) {
+        treeState.expandedOverrides = { ...uiState.treeExpanded };
     }
 }
 let activeRequests = 0;
@@ -1050,6 +1106,8 @@ function render() {
         renderGraph();
     } else if (viewMode === 'table') {
         renderTable();
+    } else if (viewMode === 'tree') {
+        renderTree();
     } else {
         renderKanban();
     }
@@ -1896,6 +1954,213 @@ function renderTable() {
 
 }
 
+// Tree view sibling-sort options, in dropdown order.
+const TREE_SORT_OPTIONS = [
+    { id: 'updated_at', label: 'Updated' },
+    { id: 'priority', label: 'Priority' },
+    { id: 'title', label: 'Title' },
+    { id: 'created_at', label: 'Created' }
+];
+
+// bd-list-style status glyphs for tree rows. The formatted status name is
+// exposed via the title tooltip; the glyph + color carry it at a glance.
+const TREE_STATUS_GLYPHS = {
+    open: { glyph: '○', cls: 'tree-status-open' },
+    in_progress: { glyph: '◐', cls: 'tree-status-in-progress' },
+    blocked: { glyph: '⊘', cls: 'tree-status-blocked' },
+    deferred: { glyph: '◌', cls: 'tree-status-deferred' },
+    closed: { glyph: '●', cls: 'tree-status-closed' },
+    tombstone: { glyph: '✕', cls: 'tree-status-tombstone' },
+    pinned: { glyph: '◉', cls: 'tree-status-pinned' }
+};
+
+// Stored expansion for a tree node: explicit override, else depth default.
+function isTreeNodeExpanded(id, depth) {
+    const override = treeState.expandedOverrides[id];
+    return typeof override === 'boolean' ? override : defaultExpanded(depth);
+}
+
+// Flip a tree node's expansion relative to its *rendered* state, so
+// collapsing an auto-expanded branch behaves as the user expects. The
+// override entry is deleted before being re-added so Object key order
+// doubles as a least-recently-touched list for trimTreeExpanded(), and
+// overrides equal to the depth default are pruned rather than stored.
+function toggleTreeNode(id, depth, renderedExpanded) {
+    const next = !renderedExpanded;
+    delete treeState.expandedOverrides[id];
+    if (next !== defaultExpanded(depth)) {
+        treeState.expandedOverrides[id] = next;
+    }
+    saveState();
+    renderTree();
+}
+
+// Tree view rendering. Builds the displayed hierarchy from cardCache via
+// the pure treeBuilder helpers, then renders flat rows whose connector
+// lines (vertical guides + tee/elbow joiners) are drawn entirely in CSS.
+function renderTree() {
+    const matched = getFilteredCards();
+    const matchedIds = new Set(matched.map(c => c.id));
+    // Auto-expand only when the user has narrowed the board beyond the
+    // first-load defaults (Status: Active, Priority/Type: All, empty
+    // search). The Active default itself excludes closed issues, so a
+    // plain "fewer matches than cards" check would force-expand every
+    // branch with active descendants on a fresh board, defeating the
+    // one-level default expansion.
+    const searchActive = !!(filterSearch && filterSearch.value && filterSearch.value.trim());
+    const filtersAtDefaults = selectionEquals(getSelectedStatuses(), STATUS_ACTIVE)
+        && selectionEquals(readSelectedStrings(filterPriorityDropdown), PRIORITY_ALL)
+        && selectionEquals(getSelectedTypes(), TYPE_ALL);
+    const filterActive = searchActive || !filtersAtDefaults;
+    const roots = buildDisplayTree([...cardCache.values()], matchedIds, treeState.sort);
+    const rows = flattenVisibleRows(roots, isTreeNodeExpanded, filterActive);
+    const rowsById = new Map(rows.map(r => [r.id, r]));
+
+    const sortOptions = TREE_SORT_OPTIONS.map(opt =>
+        `<option value="${opt.id}" ${treeState.sort.id === opt.id ? 'selected' : ''}>${opt.label}</option>`
+    ).join('');
+
+    let treeHtml = `
+        <div class="tree-view">
+            <div class="tree-controls">
+                <label for="treeSortSelect">Sort siblings by:</label>
+                <select id="treeSortSelect" class="tree-sort-select">${sortOptions}</select>
+                <button class="btn" id="treeSortDirBtn" title="Toggle sort direction">${treeState.sort.dir === 'asc' ? '▲ Asc' : '▼ Desc'}</button>
+                <span class="pagination-info">Showing ${rows.length} of ${cardCache.size} issues</span>
+            </div>
+            <div class="tree-rows" id="treeRows">
+    `;
+
+    for (const row of rows) {
+        const card = cardCache.get(row.id);
+        if (!card) { continue; }
+        const type = card.issue_type || 'task';
+        const priority = typeof card.priority === 'number' ? card.priority : 2;
+        const status = card.status || 'open';
+        const guides = row.guides.map(bar =>
+            `<span class="tree-guide ${bar ? 'tree-guide-bar' : 'tree-guide-blank'}"></span>`
+        ).join('');
+        const joiner = row.depth > 0
+            ? `<span class="tree-elbow${row.isLast ? ' tree-elbow-last' : ''}"></span>`
+            : '';
+        const caret = row.hasChildren
+            ? `<span class="tree-caret" data-id="${escapeHtml(row.id)}" title="${row.expanded ? 'Collapse' : 'Expand'}">${row.expanded ? '▾' : '▸'}</span>`
+            : '<span class="tree-caret tree-caret-spacer"></span>';
+        const statusInfo = TREE_STATUS_GLYPHS[status] || TREE_STATUS_GLYPHS.open;
+        // bd-list row order: status glyph, id, priority, type, then title;
+        // only the assignee remains right-aligned.
+        treeHtml += `<div class="tree-row${row.matches ? '' : ' tree-dimmed'}" data-id="${escapeHtml(row.id)}">`
+            + guides + joiner + caret
+            + `<span class="tree-status ${sanitizeClassName(statusInfo.cls)}" data-status="${safe(formatStatusValue(status))}">${statusInfo.glyph}</span>`
+            + `<span class="tree-id copy-id" data-full-id="${escapeHtml(card.id)}" title="Click to copy: ${safe(card.id)}">${escapeHtml(card.id)}</span>`
+            + `<span class="badge ${sanitizeClassName('badge-priority-' + priority)}">P${priority}</span>`
+            + `<span class="badge ${sanitizeClassName('badge-type-' + type)}">${escapeHtml(type)}</span>`
+            + `<span class="tree-title" title="${safe(card.title || '')}">${escapeHtml(card.title || '')}</span>`
+            + (card.assignee ? `<span class="badge badge-assignee">${escapeHtml(card.assignee)}</span>` : '')
+            + '</div>';
+    }
+
+    treeHtml += `
+            </div>
+        </div>
+    `;
+
+    // Apply DOMPurify to tree HTML for defense-in-depth
+    boardEl.innerHTML = DOMPurify.sanitize(treeHtml, purifyConfig);
+
+    // The elements below are recreated on every renderTree() call (innerHTML
+    // replacement), so attaching fresh listeners here cannot accumulate.
+    const sortSelect = document.getElementById('treeSortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            treeState.sort = { ...treeState.sort, id: e.target.value };
+            saveState();
+            renderTree();
+        });
+    }
+
+    const sortDirBtn = document.getElementById('treeSortDirBtn');
+    if (sortDirBtn) {
+        sortDirBtn.addEventListener('click', () => {
+            treeState.sort = { ...treeState.sort, dir: treeState.sort.dir === 'asc' ? 'desc' : 'asc' };
+            saveState();
+            renderTree();
+        });
+    }
+
+    const treeRowsEl = document.getElementById('treeRows');
+    if (!treeRowsEl) { return; }
+
+    // tabindex is not in the DOMPurify ALLOWED_ATTR list; set it after
+    // sanitization (same pattern as the table rows).
+    const rowEls = treeRowsEl.querySelectorAll('.tree-row');
+    for (const rowEl of rowEls) {
+        rowEl.setAttribute('tabindex', '0');
+    }
+
+    // One delegated listener for carets, copy-id affordances, and row bodies.
+    treeRowsEl.addEventListener('click', (e) => {
+        const caretEl = e.target.closest('.tree-caret');
+        if (caretEl && caretEl.dataset.id) {
+            e.stopPropagation();
+            const row = rowsById.get(caretEl.dataset.id);
+            if (row) {
+                toggleTreeNode(row.id, row.depth, row.expanded);
+            }
+            return;
+        }
+        const copyEl = e.target.closest('.copy-id');
+        if (copyEl && copyEl.dataset.fullId) {
+            e.stopPropagation();
+            post('issue.copyToClipboard', { text: copyEl.dataset.fullId });
+            toast(`Copied: ${copyEl.dataset.fullId}`);
+            return;
+        }
+        const rowEl = e.target.closest('.tree-row');
+        if (rowEl && rowEl.dataset.id) {
+            const card = cardCache.get(rowEl.dataset.id);
+            if (card) {
+                openDetail(card);
+            }
+        }
+    });
+
+    treeRowsEl.addEventListener('keydown', (e) => {
+        const rowEl = e.target.closest('.tree-row');
+        if (!rowEl || !rowEl.dataset.id) { return; }
+        const row = rowsById.get(rowEl.dataset.id);
+        if (!row) { return; }
+        const allRows = Array.from(treeRowsEl.querySelectorAll('.tree-row'));
+        const currentIndex = allRows.indexOf(rowEl);
+
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const card = cardCache.get(row.id);
+            if (card) {
+                openDetail(card);
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            allRows[currentIndex + 1]?.focus();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            allRows[currentIndex - 1]?.focus();
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (row.hasChildren && !row.expanded) {
+                toggleTreeNode(row.id, row.depth, row.expanded);
+                document.querySelector(`.tree-row[data-id="${CSS.escape(row.id)}"]`)?.focus();
+            }
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (row.hasChildren && row.expanded) {
+                toggleTreeNode(row.id, row.depth, row.expanded);
+                document.querySelector(`.tree-row[data-id="${CSS.escape(row.id)}"]`)?.focus();
+            }
+        }
+    });
+}
+
 // Handle column sorting
 function handleColumnSort(columnId, isShiftKey) {
 
@@ -2164,6 +2429,7 @@ viewKanbanBtn.addEventListener("click", () => {
         viewKanbanBtn.classList.add('active');
         viewTableBtn.classList.remove('active');
         viewGraphBtn.classList.remove('active');
+        viewTreeBtn.classList.remove('active');
         boardEl.classList.remove('hidden');
         dependencyDiagram.classList.add('hidden');
         saveState();
@@ -2177,6 +2443,7 @@ viewTableBtn.addEventListener("click", () => {
         viewTableBtn.classList.add('active');
         viewKanbanBtn.classList.remove('active');
         viewGraphBtn.classList.remove('active');
+        viewTreeBtn.classList.remove('active');
         boardEl.classList.remove('hidden');
         dependencyDiagram.classList.add('hidden');
         saveState();
@@ -2190,6 +2457,21 @@ viewGraphBtn.addEventListener("click", () => {
         viewGraphBtn.classList.add('active');
         viewKanbanBtn.classList.remove('active');
         viewTableBtn.classList.remove('active');
+        viewTreeBtn.classList.remove('active');
+        saveState();
+        render();
+    }
+});
+
+viewTreeBtn.addEventListener("click", () => {
+    if (viewMode !== 'tree') {
+        viewMode = 'tree';
+        viewTreeBtn.classList.add('active');
+        viewKanbanBtn.classList.remove('active');
+        viewTableBtn.classList.remove('active');
+        viewGraphBtn.classList.remove('active');
+        boardEl.classList.remove('hidden');
+        dependencyDiagram.classList.add('hidden');
         saveState();
         render();
     }
@@ -2199,20 +2481,22 @@ viewGraphBtn.addEventListener("click", () => {
 // boot and again after persisted state is restored so the highlighted button
 // matches the rendered view.
 function syncViewModeButtons() {
+    const buttons = {
+        kanban: viewKanbanBtn,
+        table: viewTableBtn,
+        graph: viewGraphBtn,
+        tree: viewTreeBtn
+    };
+    const activeKey = Object.prototype.hasOwnProperty.call(buttons, viewMode) ? viewMode : 'kanban';
+    for (const [key, btn] of Object.entries(buttons)) {
+        btn.classList.toggle('active', key === activeKey);
+    }
     if (viewMode === 'graph') {
-        viewGraphBtn.classList.add('active');
-        viewKanbanBtn.classList.remove('active');
-        viewTableBtn.classList.remove('active');
         boardEl.classList.add('hidden');
         dependencyDiagram.classList.remove('hidden');
-    } else if (viewMode === 'table') {
-        viewTableBtn.classList.add('active');
-        viewKanbanBtn.classList.remove('active');
-        viewGraphBtn.classList.remove('active');
     } else {
-        viewKanbanBtn.classList.add('active');
-        viewTableBtn.classList.remove('active');
-        viewGraphBtn.classList.remove('active');
+        boardEl.classList.remove('hidden');
+        dependencyDiagram.classList.add('hidden');
     }
 }
 

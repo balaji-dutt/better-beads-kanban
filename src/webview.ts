@@ -61,6 +61,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       <div class="view-toggle">
         <button id="viewKanbanBtn" class="view-toggle-btn active">Kanban</button>
         <button id="viewTableBtn" class="view-toggle-btn">Table</button>
+        <button id="viewTreeBtn" class="view-toggle-btn">Tree</button>
         <button id="viewGraphBtn" class="view-toggle-btn">Graph</button>
       </div>
       <div class="filters">

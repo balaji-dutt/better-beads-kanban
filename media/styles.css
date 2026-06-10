@@ -190,9 +190,18 @@ body {
     border-color: var(--vscode-editor-foreground);
 }
 
+/* min-width: 0 lets the row shrink below its content size (so the search
+   input's flex-shrink can absorb small deficits); flex-wrap is the fallback
+   when even that is not enough, instead of pushing trailing buttons
+   off-screen. Wrapped lines left-align against each other so controls keep
+   a stable horizontal position as the panel width changes — when room
+   appears, the first line slides onto the same row without a visual jump. */
 .actions {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    min-width: 0;
 }
 
 .btn {
@@ -317,7 +326,10 @@ body {
     color: inherit;
     padding: 6px 10px;
     border-radius: 8px;
+    /* Flexible width: shrinks before the toolbar overflows or wraps. */
+    flex: 0 1 150px;
     width: 150px;
+    min-width: 60px;
 }
 
 .btn.primary {
@@ -361,6 +373,9 @@ body {
 .filters {
     display: flex;
     gap: 8px;
+    /* Allow the group to shrink so the search input's flex-shrink engages
+       before the toolbar overflows. */
+    min-width: 0;
 }
 
 .board {
@@ -1187,6 +1202,209 @@ main {
 
 .column-picker-item span {
     font-size: 13px;
+}
+
+/* Tree View Styles */
+.tree-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.tree-controls {
+    display: flex;
+    align-items: center;
+    padding: var(--pad);
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+}
+
+.tree-controls label {
+    font-size: 13px;
+    color: var(--vscode-descriptionForeground, var(--muted));
+}
+
+.tree-sort-select {
+    background: var(--bg2);
+    color: var(--vscode-editor-foreground);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.tree-rows {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--pad);
+}
+
+/* Vertical padding would break connector-line continuity (the guide spans
+   stretch only to the row's content box), so row height comes from
+   min-height instead. */
+.tree-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    min-height: 26px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.tree-row:hover {
+    background: var(--vscode-list-hoverBackground, var(--bg2));
+}
+
+.tree-row:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+/* Ancestor rows included only as context for a filter match. Opacity (rather
+   than a hardcoded color) dims whatever the active theme renders, so the
+   treatment reads correctly in both light and dark themes. */
+.tree-row.tree-dimmed {
+    opacity: 0.55;
+}
+
+/* Connector lines. One .tree-guide per ancestor level, then a .tree-elbow
+   joiner. Lines are 1px CSS borders/pseudo-elements colored to match VS
+   Code's native indent guides; continuity across rows relies on
+   align-self: stretch plus uniform single-line row height. */
+.tree-guide,
+.tree-elbow {
+    flex: none;
+    width: 18px;
+    align-self: stretch;
+    position: relative;
+}
+
+.tree-guide-bar::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--vscode-descriptionForeground, var(--muted));
+}
+
+.tree-elbow::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--vscode-descriptionForeground, var(--muted));
+}
+
+.tree-elbow-last::before {
+    bottom: 50%;
+}
+
+/* The stub extends past the span (into the flex gap) so the line visually
+   reaches the caret / status glyph it points at. */
+.tree-elbow::after {
+    content: '';
+    position: absolute;
+    left: 8px;
+    right: -5px;
+    top: 50%;
+    border-top: 1px solid var(--vscode-descriptionForeground, var(--muted));
+}
+
+/* Carets are the expand/collapse click targets — sized and highlighted so
+   they read as interactive, not as decoration. */
+.tree-caret {
+    flex: none;
+    width: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--vscode-editor-foreground);
+    cursor: pointer;
+    user-select: none;
+    border-radius: 4px;
+}
+
+.tree-caret:hover {
+    background: var(--vscode-toolbar-hoverBackground, var(--bg2));
+}
+
+.tree-caret-spacer {
+    visibility: hidden;
+    cursor: default;
+}
+
+/* Single-line truncation keeps row heights uniform, which the connector
+   lines depend on; the full title is exposed via the title attribute. */
+.tree-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+/* bd-list-style status glyphs. Fixed colors, same convention as the badge
+   palette; the formatted status name shows in an instant CSS tooltip
+   (native title tooltips have a fixed ~1s hover delay in Chromium). */
+.tree-status {
+    flex: none;
+    width: 1.1em;
+    text-align: center;
+    font-size: 13px;
+    user-select: none;
+    position: relative;
+}
+
+.tree-status:hover::after {
+    content: attr(data-status);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    transform: translateX(-50%);
+    background: var(--vscode-editorHoverWidget-background, #252526);
+    color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--border));
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 20;
+}
+
+.tree-status-open { color: #28c76f; }
+.tree-status-in-progress { color: #00cfe8; }
+.tree-status-blocked { color: #ea5455; }
+.tree-status-deferred { color: #b8b8b8; }
+.tree-status-closed { color: #9d9d9d; }
+.tree-status-tombstone { color: #9d9d9d; }
+.tree-status-pinned { color: #ff9f43; }
+
+/* Issue id with the table view's click-to-copy affordance. */
+.tree-id {
+    flex: none;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground, var(--muted));
+    cursor: pointer;
+}
+
+.tree-id:hover {
+    color: var(--vscode-editor-foreground);
+    text-decoration: underline;
+}
+
+/* Metadata pills stay visually subordinate to the issue title. */
+.tree-row .badge {
+    flex: none;
+    font-size: 11px;
+    padding: 1px 6px;
 }
 
 /* Column dialog (for column selection) */
