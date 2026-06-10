@@ -6,7 +6,12 @@ import {
     LabelSchema,
     DependencySchema,
     IssueIdSchema,
-    UIStateSchema
+    UIStateSchema,
+    migrateUIState,
+    STATUS_ALL_VALUES,
+    STATUS_ACTIVE_VALUES,
+    PRIORITY_ALL_VALUES,
+    TYPE_ALL_VALUES
 } from '../../types';
 
 suite('Message Validation Tests', () => {
@@ -250,7 +255,7 @@ suite('Message Validation Tests', () => {
         assert.ok(result.success, 'topBarFilters with valid arrays should pass');
     });
 
-    test('UIStateSchema: topBarFilters accepts empty arrays (means "All")', () => {
+    test('UIStateSchema: topBarFilters accepts empty arrays (None selected)', () => {
         const valid = { topBarFilters: { priority: [], type: [], status: [] } };
         const result = UIStateSchema.safeParse(valid);
         assert.ok(result.success, 'topBarFilters with empty arrays should pass');
@@ -260,5 +265,114 @@ suite('Message Validation Tests', () => {
         const invalid = { topBarFilters: { status: 'open' } };
         const result = UIStateSchema.safeParse(invalid);
         assert.ok(!result.success, 'topBarFilters entries must be arrays');
+    });
+
+    test('UIStateSchema: topBarFiltersVersion accepts literal 2', () => {
+        const valid = { topBarFiltersVersion: 2 };
+        const result = UIStateSchema.safeParse(valid);
+        assert.ok(result.success, 'topBarFiltersVersion: 2 should pass');
+    });
+
+    test('UIStateSchema: topBarFiltersVersion rejects other numbers', () => {
+        const invalid = { topBarFiltersVersion: 1 };
+        const result = UIStateSchema.safeParse(invalid);
+        assert.ok(!result.success, 'topBarFiltersVersion must be the literal 2');
+    });
+});
+
+suite('migrateUIState', () => {
+    test('Returns null/undefined/primitive inputs unchanged', () => {
+        assert.strictEqual(migrateUIState(null), null);
+        assert.strictEqual(migrateUIState(undefined), undefined);
+        assert.strictEqual(migrateUIState(42), 42);
+        assert.strictEqual(migrateUIState('hello'), 'hello');
+    });
+
+    test('Returns arrays unchanged (defensive: workspaceState shape should be object)', () => {
+        const input = [1, 2, 3];
+        assert.strictEqual(migrateUIState(input), input);
+    });
+
+    test('Version-2 payload passes through with no modification', () => {
+        const v2 = {
+            topBarFiltersVersion: 2,
+            topBarFilters: { priority: [], type: [], status: [] }
+        };
+        const out = migrateUIState(v2) as Record<string, unknown>;
+        // Empty arrays preserved → current-shape "None" intent honored.
+        const tb = out.topBarFilters as Record<string, unknown>;
+        assert.deepStrictEqual(tb.priority, []);
+        assert.deepStrictEqual(tb.type, []);
+        assert.deepStrictEqual(tb.status, []);
+        assert.strictEqual(out.topBarFiltersVersion, 2);
+    });
+
+    test('Legacy payload: empty arrays are expanded to full universes', () => {
+        const legacy = {
+            topBarFilters: { priority: [], type: [], status: [] }
+        };
+        const out = migrateUIState(legacy) as Record<string, unknown>;
+        const tb = out.topBarFilters as Record<string, unknown>;
+        assert.deepStrictEqual(tb.priority, [...PRIORITY_ALL_VALUES]);
+        assert.deepStrictEqual(tb.type, [...TYPE_ALL_VALUES]);
+        assert.deepStrictEqual(tb.status, [...STATUS_ALL_VALUES]);
+        assert.strictEqual(out.topBarFiltersVersion, 2);
+    });
+
+    test('Legacy payload: non-empty arrays are preserved verbatim, only empty arrays expand', () => {
+        const legacy = {
+            topBarFilters: {
+                priority: ['0', '1'],
+                type: [],
+                status: ['open', 'in_progress']
+            }
+        };
+        const out = migrateUIState(legacy) as Record<string, unknown>;
+        const tb = out.topBarFilters as Record<string, unknown>;
+        assert.deepStrictEqual(tb.priority, ['0', '1']);
+        assert.deepStrictEqual(tb.type, [...TYPE_ALL_VALUES]);
+        assert.deepStrictEqual(tb.status, ['open', 'in_progress']);
+        assert.strictEqual(out.topBarFiltersVersion, 2);
+    });
+
+    test('Legacy payload without topBarFilters: stamps version but adds no filter data', () => {
+        const legacy = { viewMode: 'kanban', collapsedColumns: ['blocked'] };
+        const out = migrateUIState(legacy) as Record<string, unknown>;
+        assert.strictEqual(out.viewMode, 'kanban');
+        assert.deepStrictEqual(out.collapsedColumns, ['blocked']);
+        assert.strictEqual(out.topBarFiltersVersion, 2);
+        assert.strictEqual(out.topBarFilters, undefined);
+    });
+
+    test('Migration output validates cleanly against UIStateSchema', () => {
+        const legacy = {
+            viewMode: 'table' as const,
+            topBarFilters: { priority: [], type: ['bug'], status: [] }
+        };
+        const migrated = migrateUIState(legacy);
+        const result = UIStateSchema.safeParse(migrated);
+        assert.ok(result.success, `Migrated payload should parse: ${(result as { success: false; error: { message: string } }).error?.message}`);
+    });
+
+    test('Migration is pure: does not mutate the input', () => {
+        const input = {
+            topBarFilters: { priority: [], type: ['bug'], status: [] }
+        };
+        const inputCopy = JSON.parse(JSON.stringify(input));
+        migrateUIState(input);
+        assert.deepStrictEqual(input, inputCopy, 'Input must not be mutated');
+    });
+
+    test('STATUS_ACTIVE_VALUES is a strict subset of STATUS_ALL_VALUES', () => {
+        for (const v of STATUS_ACTIVE_VALUES) {
+            assert.ok(
+                (STATUS_ALL_VALUES as readonly string[]).includes(v),
+                `Active value "${v}" must appear in STATUS_ALL_VALUES`
+            );
+        }
+        assert.ok(
+            STATUS_ALL_VALUES.length > STATUS_ACTIVE_VALUES.length,
+            'STATUS_ALL must be strictly larger than STATUS_ACTIVE (else there is no Closed to exclude)'
+        );
     });
 });

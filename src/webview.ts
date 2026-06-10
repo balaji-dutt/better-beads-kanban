@@ -71,11 +71,11 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
             <span class="dropdown-arrow">▼</span>
           </button>
           <div id="filterPriorityDropdown" class="status-dropdown hidden">
-            <label class="status-option"><input type="checkbox" value="" checked /> All</label>
-            <label class="status-option"><input type="checkbox" value="0" /> P0</label>
-            <label class="status-option"><input type="checkbox" value="1" /> P1</label>
-            <label class="status-option"><input type="checkbox" value="2" /> P2</label>
-            <label class="status-option"><input type="checkbox" value="3" /> P3</label>
+            <label class="status-option"><input type="checkbox" value="" data-preset="all" checked /> All</label>
+            <label class="status-option"><input type="checkbox" value="0" checked /> P0</label>
+            <label class="status-option"><input type="checkbox" value="1" checked /> P1</label>
+            <label class="status-option"><input type="checkbox" value="2" checked /> P2</label>
+            <label class="status-option"><input type="checkbox" value="3" checked /> P3</label>
           </div>
         </div>
         <div class="status-filter-wrapper">
@@ -84,25 +84,26 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
             <span class="dropdown-arrow">▼</span>
           </button>
           <div id="filterTypeDropdown" class="status-dropdown hidden">
-            <label class="status-option"><input type="checkbox" value="" checked /> All</label>
-            <label class="status-option"><input type="checkbox" value="task" /> Task</label>
-            <label class="status-option"><input type="checkbox" value="bug" /> Bug</label>
-            <label class="status-option"><input type="checkbox" value="feature" /> Feature</label>
-            <label class="status-option"><input type="checkbox" value="epic" /> Epic</label>
-            <label class="status-option"><input type="checkbox" value="chore" /> Chore</label>
+            <label class="status-option"><input type="checkbox" value="" data-preset="all" checked /> All</label>
+            <label class="status-option"><input type="checkbox" value="task" checked /> Task</label>
+            <label class="status-option"><input type="checkbox" value="bug" checked /> Bug</label>
+            <label class="status-option"><input type="checkbox" value="feature" checked /> Feature</label>
+            <label class="status-option"><input type="checkbox" value="epic" checked /> Epic</label>
+            <label class="status-option"><input type="checkbox" value="chore" checked /> Chore</label>
           </div>
         </div>
         <div class="status-filter-wrapper">
           <button id="filterStatusBtn" class="select status-filter-btn" type="button" title="Filter by status">
-            <span id="filterStatusLabel">Status: All</span>
+            <span id="filterStatusLabel">Status: Active</span>
             <span class="dropdown-arrow">▼</span>
           </button>
           <div id="filterStatusDropdown" class="status-dropdown hidden">
-            <label class="status-option"><input type="checkbox" value="" checked /> All</label>
-            <label class="status-option"><input type="checkbox" value="open" /> Open</label>
-            <label class="status-option"><input type="checkbox" value="in_progress" /> In Progress</label>
-            <label class="status-option"><input type="checkbox" value="blocked" /> Blocked</label>
-            <label class="status-option"><input type="checkbox" value="deferred" /> Deferred</label>
+            <label class="status-option"><input type="checkbox" value="" data-preset="all" /> All</label>
+            <label class="status-option"><input type="checkbox" value="" data-preset="active" checked /> Active</label>
+            <label class="status-option"><input type="checkbox" value="open" checked /> Open</label>
+            <label class="status-option"><input type="checkbox" value="in_progress" checked /> In Progress</label>
+            <label class="status-option"><input type="checkbox" value="blocked" checked /> Blocked</label>
+            <label class="status-option"><input type="checkbox" value="deferred" checked /> Deferred</label>
             <label class="status-option"><input type="checkbox" value="closed" /> Closed</label>
             <label class="status-option"><input type="checkbox" value="tombstone" /> Tombstone</label>
             <label class="status-option"><input type="checkbox" value="pinned" /> Pinned</label>
@@ -116,6 +117,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
   </header>
 
   <main>
+    <div id="boardEmptyState" class="empty-state-hint hidden" role="status"></div>
     <div id="board" class="board"></div>
     <div id="dependencyDiagram" class="dependency-diagram hidden">
       <!-- Left Sidebar: Issue List -->

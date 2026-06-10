@@ -298,6 +298,18 @@ body {
     cursor: pointer;
 }
 
+.empty-state-hint {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--vscode-descriptionForeground, var(--muted));
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.empty-state-hint.hidden {
+    display: none;
+}
+
 .search-input {
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.03);

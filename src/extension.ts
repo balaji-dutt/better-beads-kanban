@@ -21,6 +21,7 @@ import {
   TableLoadPageSchema,
   UIStateSchema,
   UIState,
+  migrateUIState,
   ColumnDataMap,
   ColumnData,
   IssueIdSchema
@@ -233,7 +234,8 @@ export function activate(context: vscode.ExtensionContext) {
     const readPersistedUIState = (): UIState | undefined => {
       const raw = context.workspaceState.get('beadsKanban.uiState');
       if (raw === undefined) { return undefined; }
-      const parsed = UIStateSchema.safeParse(raw);
+      const migrated = migrateUIState(raw);
+      const parsed = UIStateSchema.safeParse(migrated);
       if (!parsed.success) {
         output.appendLine(`[Extension] Discarding invalid persisted UI state: ${parsed.error.message}`);
         return undefined;

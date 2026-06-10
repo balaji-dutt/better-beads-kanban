@@ -327,6 +327,21 @@ export const BoardLoadMoreSchema = z.object({
   column: BoardColumnKeySchema
 });
 
+// Toolbar filter universe constants. These define which values appear in each
+// top-bar dropdown and back the inclusive-multiselect semantics:
+//   - selected = []         → "None" (no issues match this filter)
+//   - selected = full set   → "All" (the preset row appears checked)
+//   - selected = STATUS_ACTIVE → "Active" preset (Status only; mirrors `bd list`)
+//   - selected = anything else → that explicit subset
+export const STATUS_ALL_VALUES = [
+  'open', 'in_progress', 'blocked', 'deferred', 'closed', 'tombstone', 'pinned'
+] as const;
+export const STATUS_ACTIVE_VALUES = [
+  'open', 'in_progress', 'blocked', 'deferred'
+] as const;
+export const PRIORITY_ALL_VALUES = ['0', '1', '2', '3'] as const;
+export const TYPE_ALL_VALUES = ['task', 'bug', 'feature', 'epic', 'chore'] as const;
+
 // Persisted UI state — mirrors the fields the webview's saveState() writes today.
 // Used for cross-session persistence via context.workspaceState (per-workspace).
 // tableFilters shape is intentionally permissive so future filter changes can land
@@ -342,15 +357,60 @@ export const UIStateSchema = z.object({
   tableColumnOrder: z.array(z.string().max(50)).max(50).optional(),
   tableFilters: z.record(z.string().max(50), z.unknown()).optional(),
   // Toolbar dropdown selections (Priority / Type / Status). Each entry is the
-  // array of non-"All" checked values; an empty array means "All" is selected.
+  // array of explicitly-checked values under inclusive-multiselect semantics:
+  // an empty array means "None selected" (no issues match), and the "All" /
+  // "Active" preset rows are derived state, not separate filter values.
   topBarFilters: z.object({
     priority: z.array(z.string().max(20)).max(10).optional(),
     type: z.array(z.string().max(50)).max(20).optional(),
     status: z.array(z.string().max(50)).max(20).optional()
-  }).optional()
+  }).optional(),
+  // Version stamp for the topBarFilters shape. Payloads without this field
+  // come from an older build where an empty filter array meant "All" rather
+  // than "None"; migrateUIState() upgrades those before they reach the
+  // webview so the legacy semantics aren't carried into the new model.
+  topBarFiltersVersion: z.literal(2).optional()
 });
 
 export type UIState = z.infer<typeof UIStateSchema>;
+
+// Upgrade a persisted UI-state payload from the older filter semantics to the
+// current one. The older shape used an empty filter array as a sentinel for
+// "All selected"; the current shape uses an empty array to mean "None
+// selected". Without this migration, a workspace persisted by an older build
+// would render an empty board the first time the user opened it after upgrade.
+//
+// Behavior:
+//   - Non-object input → returned as-is (defensive; safeParse will reject).
+//   - topBarFiltersVersion === 2 → returned as-is (already current).
+//   - Otherwise → each empty array under topBarFilters is expanded to the
+//     corresponding full universe, and topBarFiltersVersion: 2 is stamped.
+//
+// Pure; does not mutate the input.
+export function migrateUIState(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return raw; }
+  const state = raw as Record<string, unknown>;
+  if (state.topBarFiltersVersion === 2) { return state; }
+
+  const result: Record<string, unknown> = { ...state };
+  const topBar = state.topBarFilters;
+  if (topBar && typeof topBar === 'object' && !Array.isArray(topBar)) {
+    const tb = topBar as Record<string, unknown>;
+    const migratedTopBar: Record<string, unknown> = { ...tb };
+    const expandIfEmpty = (key: string, universe: readonly string[]): void => {
+      const value = tb[key];
+      if (Array.isArray(value) && value.length === 0) {
+        migratedTopBar[key] = [...universe];
+      }
+    };
+    expandIfEmpty('priority', PRIORITY_ALL_VALUES);
+    expandIfEmpty('type', TYPE_ALL_VALUES);
+    expandIfEmpty('status', STATUS_ALL_VALUES);
+    result.topBarFilters = migratedTopBar;
+  }
+  result.topBarFiltersVersion = 2;
+  return result;
+}
 
 export const TableLoadPageSchema = z.object({
   filters: z.object({

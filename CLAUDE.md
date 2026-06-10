@@ -176,6 +176,10 @@ ExtMsg types (Extension -> Webview)
 
 The webview calls `saveState()` on every relevant UI change (sort click, column visibility toggle, column-order reset, view-mode switch). Each call writes to `vscode.setState` for fast in-session round-trips AND posts a `state.uiState` message to the extension, which validates with `UIStateSchema` and writes to `context.workspaceState`. On `board.load` / `board.refresh` (and on `board.loadMinimal` and `repo.select`), the extension reads `workspaceState`, re-validates defensively, and attaches the result as `payload.uiState` so the webview can apply it before first render. Persisted values win over `vscode.getState()`. The workspaceState key is `beadsKanban.uiState`, following the same naming convention as `beadsRepoPath`.
 
+**Toolbar filter shape (`topBarFilters`, versioned)**
+
+The `topBarFilters` field of `UIStateSchema` holds the Priority / Type / Status dropdown selections under inclusive-multiselect semantics: each entry is an array of explicitly-checked values, an empty array means "None selected" (no card passes that filter), and the "All" / "Active" preset rows are derived from set-equality against the universe / active subset rather than stored as separate filter values. The companion field `topBarFiltersVersion: 2` stamps payloads written by builds using these semantics. The `migrateUIState()` helper in `src/types.ts` reads any persisted payload missing the version field as the older "empty array = All" shape, expands empty arrays to their full universe (`STATUS_ALL_VALUES`, `PRIORITY_ALL_VALUES`, `TYPE_ALL_VALUES`), and stamps the version. The extension's `readPersistedUIState` runs every raw `workspaceState` payload through `migrateUIState` before `UIStateSchema.safeParse`, so the webview only ever sees the current shape.
+
 ### Database Schema
 
 The extension reads from a SQLite database at `.beads/*.db` (or .sqlite/.sqlite3). The DB is expected to include:
@@ -202,6 +206,37 @@ The board displays 4 columns:
 4. Closed - status = closed
 
 Moving cards between columns updates the underlying issue status. The Ready column maps back to open.
+
+**Toolbar filter defaults and semantics**
+
+The three top-bar dropdowns (Priority / Type / Status) use inclusive multi-select: each row's checked state is the source of truth for whether its value passes through `getFilteredCards`. Preset rows ("All" and Status-only "Active") are derived UI — clicking one drives a state-machine transition but the rows themselves do not carry filter state.
+
+State-machine transitions for Status (`src/webview/filterStateMachine.ts`):
+
+| User action | Resulting selection |
+|---|---|
+| Click "Active" while unchecked | `['open', 'in_progress', 'blocked', 'deferred']` |
+| Click "Active" while checked | full universe (switches to All) |
+| Click "All" while unchecked | full universe |
+| Click "All" while checked | `[]` (clears to None) |
+| Toggle individual value | add / remove from the set |
+
+Priority and Type follow the same machine without the "Active" row.
+
+First-load defaults (no persisted state):
+
+- Status → "Active" (mirrors `bd list`, which excludes closed by default).
+- Priority → "All".
+- Type → "All".
+
+`tombstone` and `pinned` are part of the Status universe ("All" selects them) but **not** part of "Active", so the default view hides them along with closed.
+
+Empty-state messaging is rendered in `#boardEmptyState` above the board:
+
+- `selectedStatuses.length === 0` → "No statuses selected. Use the Status filter to choose what to show."
+- Filtered count is zero but the Status filter is non-empty → "No issues match the current filters."
+
+The "Clear Filters" button resets to the first-load defaults (it does not push every checkbox to "All").
 
 ### Data Adapter
 
