@@ -1,19 +1,19 @@
 {
-  "name": "beads-kanban",
-  "displayName": "Beads Kanban",
+  "name": "beads-kanban-bd-fixes",
+  "displayName": "Beads Kanban (BD Fixes)",
   "description": "Visual Kanban board for Beads issue tracking - view and manage your .beads issues in VS Code",
   "repository": {
     "type": "git",
-    "url": "https://github.com/davidcforbes/beads-kanban.git"
+    "url": "https://github.com/balaji-dutt/Beads-Kanban.git"
   },
   "author": {
     "name": "David Forbes",
     "url": "https://github.com/davidcforbes"
   },
   "license": "MIT",
-  "homepage": "https://github.com/davidcforbes/beads-kanban",
-  "bugs": "https://github.com/davidcforbes/beads-kanban/issues",
-  "qna": "https://github.com/davidcforbes/beads-kanban/discussions",
+  "homepage": "https://github.com/balaji-dutt/Beads-Kanban",
+  "bugs": "https://github.com/balaji-dutt/Beads-Kanban/issues",
+  "qna": "https://github.com/balaji-dutt/Beads-Kanban/discussions",
   "keywords": [
     "kanban",
     "issue-tracking",
@@ -22,8 +22,8 @@
     "agile",
     "visualization"
   ],
-  "version": "2.1.4",
-  "publisher": "davidcforbes",
+  "version": "2.1.4-bd.1",
+  "publisher": "balaji-dutt",
   "pricing": "Free",
   "sponsor": {
     "url": "https://github.com/sponsors/davidcforbes"
