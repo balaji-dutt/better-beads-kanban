@@ -21,7 +21,6 @@ const buildOptions = {
   format: 'cjs',
   external: [
     'vscode', // VS Code extension API must be external
-    'better-sqlite3', // Native module - must be external
     '@vscode/test-electron',
     '@vscode/test-cli',
     'mocha',

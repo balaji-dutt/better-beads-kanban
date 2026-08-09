@@ -138,7 +138,6 @@
     "release:package": "npm run verify && npx @vscode/vsce package"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.2",
     "@types/chai": "^4.3.20",
     "@types/dompurify": "^3.0.5",
     "@types/mocha": "^10.0.10",
@@ -149,14 +148,12 @@
     "@typescript-eslint/parser": "^8.53.0",
     "@vscode/test-cli": "^0.0.9",
     "@vscode/test-electron": "^3.1.0",
-    "better-sqlite3": "^12.5.0",
     "c8": "^9.1.0",
     "chai": "^4.5.0",
     "esbuild": "^0.27.3",
     "eslint": "^8.57.0",
     "glob": "^10.5.0",
     "mocha": "^10.8.2",
-    "node-gyp": "^12.1.0",
     "sinon": "^17.0.1",
     "typescript": "^5.6.3"
   },
