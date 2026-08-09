@@ -19,7 +19,11 @@ const fs = require('fs');
 const path = require('path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SEMVER_RE = /^\d+\.\d+\.\d+$/;
+// Upstream marketplace releases are strict major.minor.patch. This fork also ships
+// private VSIX builds versioned X.Y.Z-bd.N, which are installed from a GitHub
+// release rather than the marketplace, so the suffix is allowed here and nowhere
+// else. Any other pre-release tag is still rejected.
+const SEMVER_RE = /^\d+\.\d+\.\d+(-bd\.\d+)?$/;
 
 function fail(msg) {
   process.stderr.write(`\nrelease:bump — ${msg}\n\n`);
@@ -31,7 +35,7 @@ if (!newVersion) {
   fail('missing version argument. Usage: npm run release:bump -- X.Y.Z');
 }
 if (!SEMVER_RE.test(newVersion)) {
-  fail(`"${newVersion}" is not major.minor.patch — VS Code marketplace rejects pre-release tags like 2.1.4-beta.1`);
+  fail(`"${newVersion}" is not major.minor.patch (or X.Y.Z-bd.N for fork VSIX builds) — VS Code marketplace rejects pre-release tags like 2.1.4-beta.1`);
 }
 
 // --- package.json -----------------------------------------------------------

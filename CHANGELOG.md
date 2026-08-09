@@ -5,6 +5,22 @@ All notable changes to the Beads Kanban extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4-bd.2] - 2026-08-09
+
+Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
+
+### 🐛 Bug Fixes
+
+- **Editing an issue no longer fails because of an untouched field.** The edit dialog posted every form field on every save, so one oversized field made *any* edit fail validation — unassigning an issue whose `design` held a long plan document was rejected before `bd` was ever invoked. Saves now send only the fields that actually changed. Saving with nothing changed reports "No changes to save" instead of posting a no-op update.
+- **Raised the long-text cap from 10,000 to 65,536 characters** for `description`, `acceptance_criteria`, `design`, and `notes` on both `IssueUpdateSchema` and `IssueCreateSchema`. `bd` stores these as `longtext`; the limit was purely client-side. 65,536 is deliberate, not round: these values reach `bd` as single argv entries, and Linux caps one argv entry at 128 KiB (`MAX_ARG_STRLEN`). Comment text is unchanged at 10,000.
+
+### 🔧 Internal
+
+- **`npm test` runs again on macOS.** `@vscode/test-electron` 2.5.2 hardcoded `Contents/MacOS/Electron`, which VS Code renamed to `Code` in 1.110, so every run died with `spawn ... ENOENT` after downloading 300 MB. Bumped to `^3.1.0`, which resolves the executable by product name.
+- **Integration tests skip instead of failing when there's no beads database.** `skipIfNoBd` only matched `daemon is not running` and `ENOENT` — wording from before bd 1.0 removed the daemon. bd now reports `no beads database found`, so six `DaemonBeadsAdapter` tests failed on any checkout without a `.beads` directory.
+- `scripts/bump-version.js` accepts `X.Y.Z-bd.N` alongside strict `major.minor.patch`. Other pre-release tags are still rejected, since the marketplace refuses them.
+- Added `scripts/release-fork-vsix.sh`, which builds the branch/SHA-tagged VSIX, writes `SHA256SUMS`, and cuts the `bd-fixes-v<version>-<sha>` GitHub release. This previously lived in git-excluded `.local/` and did not survive a fresh clone.
+
 ## [2.1.4] - 2026-04-24
 
 ### 🧹 Cleanup
