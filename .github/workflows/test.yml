@@ -1,10 +1,13 @@
 name: Test Suite
 
+# integration/bd-fixes is where the fork's work happens; without it the matrix
+# never runs on the branch that produces the VSIX. Local verification is macOS
+# only, and the VSIX is consumed by Linux devcontainers.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, integration/bd-fixes ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, integration/bd-fixes ]
   workflow_dispatch:
 
 jobs:
