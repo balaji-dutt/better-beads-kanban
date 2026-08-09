@@ -46,6 +46,7 @@ out/
 
 # Build artifacts and packages
 *.vsix
+SHA256SUMS
 dist/
 
 # Test reports and generated files
