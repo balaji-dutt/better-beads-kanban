@@ -1,11 +1,53 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { DaemonBeadsAdapter } from '../../daemonBeadsAdapter';
+
+/**
+ * These tests drive a real bd CLI, so they need a real database. The extension's
+ * own repo has no .beads directory, and pointing them at the developer's actual
+ * workspace would let a test run create and close issues in live data.
+ *
+ * The fixture lives under the OS temp directory, deliberately *outside* this
+ * repository. A fixture nested inside the repo inherits bd's fork handling:
+ * Beads-Kanban is a GitHub fork, and with a `routing.contributor` set in the
+ * user's bd config, bd treats the local store as read-only for updates. Creates
+ * succeed, `bd update` fails with "embeddeddolt: store is read-only", and the
+ * seeding step dies halfway. Outside the repo there is no fork to detect.
+ */
+const FIXTURE_PREFIX = 'bktest';
+let fixtureDir: string;
 
 suite('DaemonBeadsAdapter Integration Tests', () => {
     let adapter: DaemonBeadsAdapter;
     let output: vscode.OutputChannel;
     let workspaceRoot: string;
+
+    /** True when the bd CLI is callable at all. */
+    function bdAvailable(): boolean {
+        const probe = cp.spawnSync('bd', ['version'], { encoding: 'utf8' });
+        return !probe.error && probe.status === 0;
+    }
+
+    /** Run bd in the fixture directory, throwing with useful output on failure. */
+    function bd(args: string[]): string {
+        const result = cp.spawnSync('bd', args, {
+            cwd: fixtureDir,
+            encoding: 'utf8'
+        });
+        if (result.error) {
+            throw result.error;
+        }
+        if (result.status !== 0) {
+            throw new Error(
+                `bd ${args.join(' ')} failed (${result.status}): ${result.stderr || result.stdout}`
+            );
+        }
+        return (result.stdout || '').trim();
+    }
 
     /**
      * Skip test when the environment can't support it: no bd CLI on PATH, or no
@@ -29,13 +71,68 @@ suite('DaemonBeadsAdapter Integration Tests', () => {
         }
     }
 
+    suiteSetup(async function() {
+        // bd init pulls up an embedded Dolt engine and seeding is a handful of
+        // subprocess calls, so this needs far more than the default 2s.
+        this.timeout(180000);
+
+        // CI does not install bd. Skip the whole suite rather than reporting a
+        // wall of failures for something the environment simply can't run.
+        if (!bdAvailable()) {
+            this.skip();
+        }
+
+        fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beads-kanban-test-'));
+
+        // --prefix is explicit because bd otherwise derives it from the directory
+        // name, and '.test-workspace' would produce issue IDs that fail
+        // ISSUE_ID_PATTERN (which requires a leading alphanumeric).
+        bd(['init', '--non-interactive', '--quiet', '--prefix', FIXTURE_PREFIX]);
+
+        // Seed enough for the board assertions to actually run. Most of them are
+        // guarded by `if (cards.length > 0)`, so an empty database would let the
+        // suite pass without checking anything.
+        //
+        // Seeding goes through the bd CLI rather than DaemonBeadsAdapter on
+        // purpose: the fixture must not depend on the class under test, or an
+        // adapter regression turns into a skipped suite instead of a red test.
+        const seeds: Array<{
+            title: string;
+            type: string;
+            priority: string;
+            status?: string;
+        }> = [
+            { title: 'Seed: open task', type: 'task', priority: '2' },
+            { title: 'Seed: open bug', type: 'bug', priority: '1' },
+            { title: 'Seed: work in progress', type: 'feature', priority: '0', status: 'in_progress' },
+            { title: 'Seed: blocked chore', type: 'chore', priority: '3', status: 'blocked' },
+            { title: 'Seed: closed epic', type: 'epic', priority: '4', status: 'closed' },
+            { title: 'Seed: second open task', type: 'task', priority: '2' }
+        ];
+
+        for (const seed of seeds) {
+            const id = bd([
+                'create', '--silent',
+                '--title', seed.title,
+                '--description', `Fixture issue for ${seed.type} coverage.`,
+                '--type', seed.type,
+                '--priority', seed.priority
+            ]);
+            if (seed.status) {
+                bd(['update', id, '--status', seed.status]);
+            }
+        }
+    });
+
+    suiteTeardown(() => {
+        if (fixtureDir) {
+            fs.rmSync(fixtureDir, { recursive: true, force: true });
+        }
+    });
+
     setup(() => {
         output = vscode.window.createOutputChannel('Test');
-        const ws = vscode.workspace.workspaceFolders?.[0];
-        if (!ws) {
-            throw new Error('No workspace folder found for testing');
-        }
-        workspaceRoot = ws.uri.fsPath;
+        workspaceRoot = fixtureDir;
         adapter = new DaemonBeadsAdapter(workspaceRoot, output);
     });
 
