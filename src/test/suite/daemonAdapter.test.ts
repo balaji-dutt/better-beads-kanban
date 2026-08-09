@@ -7,10 +7,24 @@ suite('DaemonBeadsAdapter Integration Tests', () => {
     let output: vscode.OutputChannel;
     let workspaceRoot: string;
 
-    /** Skip test when bd CLI is unavailable or daemon is not running */
+    /**
+     * Skip test when the environment can't support it: no bd CLI on PATH, or no
+     * beads database in the workspace. These are integration tests against a real
+     * bd, so an absent database is "can't run here", not a failure.
+     *
+     * 'daemon is not running' is a leftover from pre-1.0 bd, which had a daemon.
+     * It is kept so the guard still works against an old CLI.
+     */
     function skipIfNoBd(err: unknown, ctx: Mocha.Context): void {
-        if (err instanceof Error &&
-            (err.message.includes('daemon is not running') || err.message.includes('ENOENT'))) {
+        if (!(err instanceof Error)) {
+            return;
+        }
+        const unavailable = [
+            'daemon is not running',
+            'ENOENT',
+            'no beads database found'
+        ];
+        if (unavailable.some(marker => err.message.includes(marker))) {
             ctx.skip();
         }
     }
