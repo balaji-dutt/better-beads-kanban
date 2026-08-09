@@ -19,6 +19,7 @@
  *
  * Prerequisites:
  *   npm run compile   (must be run first to build the extension)
+ *   bd on PATH        (seeding only; without it the board launches empty)
  *
  * How it works:
  *   1. Downloads/reuses a VS Code instance via @vscode/test-electron
@@ -83,200 +84,92 @@ function httpGet(url, timeoutMs) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /**
- * Create a minimal .beads SQLite database using better-sqlite3.
- * Falls back gracefully if better-sqlite3 is not available.
+ * Seed a workspace with a bd database for visual testing.
+ *
+ * Everything goes through the bd CLI. bd 1.x dropped the SQLite backend in
+ * favour of Dolt, so writing tables directly - as this function used to -
+ * produces a file the extension can never read: the board comes up empty while
+ * seeding reports success.
+ *
+ * Degrades gracefully. If bd is missing or a command fails, warn and return
+ * null so VS Code still launches; the board will just be empty.
  */
 function seedDatabase(workspacePath) {
   const beadsDir = path.join(workspacePath, '.beads');
-  if (!fs.existsSync(beadsDir)) {
-    fs.mkdirSync(beadsDir, { recursive: true });
+  if (fs.existsSync(beadsDir)) {
+    console.log('  Database already exists: ' + beadsDir);
+    return beadsDir;
   }
 
-  const dbPath = path.join(beadsDir, 'issues.db');
-  if (fs.existsSync(dbPath)) {
-    console.log('  Database already exists: ' + dbPath);
-    return dbPath;
+  // Run bd in the workspace. bd finds .beads by walking up from cwd.
+  function bd(args) {
+    const result = childProcess.spawnSync('bd', args, {
+      cwd: workspacePath,
+      encoding: 'utf8'
+    });
+    if (result.error) { throw result.error; }
+    if (result.status !== 0) {
+      throw new Error('bd ' + args[0] + ' failed: ' + (result.stderr || result.stdout || '').trim());
+    }
+    return (result.stdout || '').trim();
   }
+
+  // title, description, type, priority, assignee, labels, status
+  const sampleIssues = [
+    ['Setup CI/CD pipeline', 'Configure GitHub Actions for automated testing', 'task', '1', 'alice', 'devops', null],
+    ['Add dark mode support', 'Implement dark theme using CSS variables', 'feature', '2', 'bob', 'frontend,ui', null],
+    ['Fix login redirect bug', 'Users are not redirected after login on mobile', 'bug', '0', 'charlie', 'bug,mobile', null],
+    ['Refactor database layer', 'Extract database calls into repository pattern', 'task', '2', 'alice', 'backend', 'in_progress'],
+    ['Implement search API', 'Full-text search endpoint for issues', 'feature', '1', 'bob', 'backend,api', 'in_progress'],
+    ['Update dependencies', 'Bump all npm packages to latest', 'chore', '3', null, null, 'in_progress'],
+    ['Design system audit', 'Review and document all UI components', 'task', '2', 'diana', 'frontend', 'blocked'],
+    ['Performance optimization', 'Reduce bundle size below 500KB', 'task', '1', 'charlie', 'performance', 'blocked'],
+    ['Write unit tests', 'Achieve 80% code coverage', 'task', '2', 'alice', null, 'closed'],
+    ['Initial project setup', 'Create repo, configure tooling', 'task', '1', 'bob', null, 'closed'],
+    ['Fix typo in README', 'Correct spelling in installation section', 'bug', '4', null, null, 'closed'],
+    ['Add export feature', 'Export board data as CSV', 'feature', '2', 'diana', 'feature', null]
+  ];
 
   try {
-    const Database = require('better-sqlite3');
-    const db = new Database(dbPath);
+    // --prefix is explicit because bd otherwise derives it from the directory
+    // name, and these workspaces are named beads-kanban-visual-XXXXXX.
+    bd(['init', '--non-interactive', '--quiet', '--prefix', 'vt']);
 
-    db.exec([
-      'CREATE TABLE issues (',
-      '  id TEXT PRIMARY KEY,',
-      '  content_hash TEXT,',
-      '  title TEXT NOT NULL CHECK(length(title) <= 500),',
-      '  description TEXT NOT NULL DEFAULT \'\',',
-      '  design TEXT NOT NULL DEFAULT \'\',',
-      '  acceptance_criteria TEXT NOT NULL DEFAULT \'\',',
-      '  notes TEXT NOT NULL DEFAULT \'\',',
-      '  status TEXT NOT NULL DEFAULT \'open\',',
-      '  priority INTEGER NOT NULL DEFAULT 2 CHECK(priority >= 0 AND priority <= 4),',
-      '  issue_type TEXT NOT NULL DEFAULT \'task\',',
-      '  assignee TEXT,',
-      '  estimated_minutes INTEGER,',
-      '  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,',
-      '  created_by TEXT DEFAULT \'\',',
-      '  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,',
-      '  closed_at DATETIME,',
-      '  closed_by_session TEXT DEFAULT \'\',',
-      '  external_ref TEXT,',
-      '  compaction_level INTEGER DEFAULT 0,',
-      '  compacted_at DATETIME,',
-      '  compacted_at_commit TEXT,',
-      '  original_size INTEGER,',
-      '  deleted_at DATETIME,',
-      '  deleted_by TEXT DEFAULT \'\',',
-      '  delete_reason TEXT DEFAULT \'\',',
-      '  original_type TEXT DEFAULT \'\',',
-      '  sender TEXT DEFAULT \'\',',
-      '  ephemeral INTEGER DEFAULT 0,',
-      '  pinned INTEGER DEFAULT 0,',
-      '  is_template INTEGER DEFAULT 0,',
-      '  mol_type TEXT DEFAULT \'\',',
-      '  event_kind TEXT DEFAULT \'\',',
-      '  actor TEXT DEFAULT \'\',',
-      '  target TEXT DEFAULT \'\',',
-      '  payload TEXT DEFAULT \'\',',
-      '  source_repo TEXT DEFAULT \'.\',',
-      '  close_reason TEXT DEFAULT \'\',',
-      '  await_type TEXT,',
-      '  await_id TEXT,',
-      '  timeout_ns INTEGER,',
-      '  waiters TEXT,',
-      '  hook_bead TEXT DEFAULT \'\',',
-      '  role_bead TEXT DEFAULT \'\',',
-      '  agent_state TEXT DEFAULT \'\',',
-      '  last_activity DATETIME,',
-      '  role_type TEXT DEFAULT \'\',',
-      '  rig TEXT DEFAULT \'\',',
-      '  due_at DATETIME,',
-      '  defer_until DATETIME,',
-      '  CHECK (',
-      '    (status = \'closed\' AND closed_at IS NOT NULL) OR',
-      '    (status = \'tombstone\') OR',
-      '    (status NOT IN (\'closed\', \'tombstone\') AND closed_at IS NULL)',
-      '  )',
-      ');',
-      '',
-      'CREATE INDEX idx_issues_status ON issues(status);',
-      'CREATE INDEX idx_issues_priority ON issues(priority);',
-      '',
-      'CREATE TABLE dependencies (',
-      '  issue_id TEXT NOT NULL,',
-      '  depends_on_id TEXT NOT NULL,',
-      '  type TEXT NOT NULL DEFAULT \'blocks\',',
-      '  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,',
-      '  created_by TEXT NOT NULL,',
-      '  metadata TEXT,',
-      '  thread_id TEXT,',
-      '  PRIMARY KEY (issue_id, depends_on_id, type),',
-      '  FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE',
-      ');',
-      '',
-      'CREATE TABLE labels (',
-      '  issue_id TEXT NOT NULL,',
-      '  label TEXT NOT NULL,',
-      '  PRIMARY KEY (issue_id, label),',
-      '  FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE',
-      ');',
-      '',
-      'CREATE TABLE comments (',
-      '  id INTEGER PRIMARY KEY AUTOINCREMENT,',
-      '  issue_id TEXT NOT NULL,',
-      '  author TEXT NOT NULL,',
-      '  text TEXT NOT NULL,',
-      '  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,',
-      '  FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE',
-      ');',
-      '',
-      'CREATE VIEW ready_issues AS',
-      'SELECT i.id',
-      'FROM issues i',
-      'WHERE i.status = \'open\'',
-      '  AND i.deleted_at IS NULL',
-      '  AND NOT EXISTS (',
-      '    SELECT 1',
-      '    FROM dependencies d',
-      '    JOIN issues dep ON d.depends_on_id = dep.id',
-      '    WHERE d.issue_id = i.id',
-      '      AND d.type = \'blocks\'',
-      '      AND dep.status != \'closed\'',
-      '      AND dep.deleted_at IS NULL',
-      '  );',
-      '',
-      'CREATE VIEW blocked_issues AS',
-      'SELECT i.id,',
-      '  COUNT(d.depends_on_id) AS blocked_by_count',
-      'FROM issues i',
-      'JOIN dependencies d ON i.id = d.issue_id',
-      'JOIN issues dep ON d.depends_on_id = dep.id',
-      'WHERE d.type = \'blocks\'',
-      '  AND dep.status != \'closed\'',
-      '  AND dep.deleted_at IS NULL',
-      '  AND i.deleted_at IS NULL',
-      'GROUP BY i.id;',
-    ].join('\n'));
+    // bd assigns the IDs, so keep the ones we need for relationships below.
+    const ids = [];
+    for (const issue of sampleIssues) {
+      const args = [
+        'create', '--silent',
+        '--title', issue[0],
+        '--description', issue[1],
+        '--type', issue[2],
+        '--priority', issue[3]
+      ];
+      if (issue[4]) { args.push('--assignee', issue[4]); }
+      if (issue[5]) { args.push('--labels', issue[5]); }
+      ids.push(bd(args));
+    }
 
-    // Seed sample issues across all columns
-    const now = new Date().toISOString();
-    const insert = db.prepare(
-      'INSERT INTO issues (id, title, description, status, priority, issue_type, assignee, created_at, updated_at, closed_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-
-    const sampleIssues = [
-      ['vt-000001', 'Setup CI/CD pipeline', 'Configure GitHub Actions for automated testing', 'open', 1, 'task', 'alice', now, now, null],
-      ['vt-000002', 'Add dark mode support', 'Implement dark theme using CSS variables', 'open', 2, 'feature', 'bob', now, now, null],
-      ['vt-000003', 'Fix login redirect bug', 'Users are not redirected after login on mobile', 'open', 0, 'bug', 'charlie', now, now, null],
-      ['vt-000004', 'Refactor database layer', 'Extract database calls into repository pattern', 'in_progress', 2, 'task', 'alice', now, now, null],
-      ['vt-000005', 'Implement search API', 'Full-text search endpoint for issues', 'in_progress', 1, 'feature', 'bob', now, now, null],
-      ['vt-000006', 'Update dependencies', 'Bump all npm packages to latest', 'in_progress', 3, 'chore', null, now, now, null],
-      ['vt-000007', 'Design system audit', 'Review and document all UI components', 'blocked', 2, 'task', 'diana', now, now, null],
-      ['vt-000008', 'Performance optimization', 'Reduce bundle size below 500KB', 'blocked', 1, 'task', 'charlie', now, now, null],
-      ['vt-000009', 'Write unit tests', 'Achieve 80% code coverage', 'closed', 2, 'task', 'alice', now, now, now],
-      ['vt-000010', 'Initial project setup', 'Create repo, configure tooling', 'closed', 1, 'task', 'bob', now, now, now],
-      ['vt-000011', 'Fix typo in README', 'Correct spelling in installation section', 'closed', 4, 'bug', null, now, now, now],
-      ['vt-000012', 'Add export feature', 'Export board data as CSV', 'open', 2, 'feature', 'diana', now, now, null],
-    ];
-
-    const insertMany = db.transaction(function(issues) {
-      for (const issue of issues) {
-        insert.run.apply(insert, issue);
-      }
+    // bd create has no --status flag, so statuses are a second pass.
+    sampleIssues.forEach(function(issue, i) {
+      if (issue[6]) { bd(['update', ids[i], '--status', issue[6]]); }
     });
-    insertMany(sampleIssues);
 
-    // Add some labels
-    const insertLabel = db.prepare('INSERT INTO labels (issue_id, label) VALUES (?, ?)');
-    const labelData = [
-      ['vt-000001', 'devops'], ['vt-000002', 'frontend'], ['vt-000002', 'ui'],
-      ['vt-000003', 'bug'], ['vt-000003', 'mobile'], ['vt-000004', 'backend'],
-      ['vt-000005', 'backend'], ['vt-000005', 'api'], ['vt-000007', 'frontend'],
-      ['vt-000008', 'performance'], ['vt-000012', 'feature'],
-    ];
-    const insertLabels = db.transaction(function(labels) {
-      for (const entry of labels) { insertLabel.run(entry[0], entry[1]); }
-    });
-    insertLabels(labelData);
+    // "Design system audit" is blocked by "Refactor database layer".
+    bd(['dep', 'add', ids[6], '--blocked-by', ids[3]]);
 
-    // Add a blocking dependency (vt-000007 blocked by vt-000004)
-    db.prepare(
-      'INSERT INTO dependencies (issue_id, depends_on_id, type, created_by) VALUES (?, ?, ?, ?)'
-    ).run('vt-000007', 'vt-000004', 'blocks', 'visual-test-harness');
+    bd(['comment', ids[2], 'Reproduced on iOS Safari. Investigating.']);
 
-    // Add a comment
-    db.prepare(
-      'INSERT INTO comments (issue_id, author, text, created_at) VALUES (?, ?, ?, ?)'
-    ).run('vt-000003', 'charlie', 'Reproduced on iOS Safari. Investigating.', now);
-
-    db.close();
-    console.log('  Seeded database with ' + sampleIssues.length + ' issues at: ' + dbPath);
-    return dbPath;
+    console.log('  Seeded database with ' + sampleIssues.length + ' issues at: ' + beadsDir);
+    return beadsDir;
 
   } catch (err) {
-    console.warn('  Warning: Could not create seeded database (' + err.message + ')');
+    console.warn('  Warning: Could not seed database (' + err.message + ')');
+    if (/store is read-only/.test(err.message)) {
+      console.warn('  bd treats a store inside a forked git repo as read-only when');
+      console.warn('  routing.contributor is set. Use the default temp workspace, or');
+      console.warn('  pass a workspace path outside any fork.');
+    }
     console.warn('  The extension will still launch but may show "no database found".');
     return null;
   }
