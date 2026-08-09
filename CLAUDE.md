@@ -418,7 +418,9 @@ Use removeEventListener before addEventListener, or use AbortController signals.
 
 **Rule: A safety-critical variable (like detailDirty) must have a single source of truth.**
 
-If both board.js and editForm.js need to check dirty state, share one reference (e.g., export a getter/setter). Two independent copies cause the unsaved-change guard to be bypassed depending on which code path opened the dialog.
+Two independent copies of such a variable cause the unsaved-change guard to be bypassed depending on which code path opened the dialog. If a second module ever needs to read dirty state, share one reference (e.g. export a getter/setter) rather than tracking it separately.
+
+This rule earned its place: `src/webview/editForm.js` was a full duplicate of the edit dialog that no longer participated in the build, and its stale `window.__editFormDirty` handshake outlived it. The file has been deleted — the edit dialog lives only in `src/webview/board.js`. Do not reintroduce a parallel copy.
 
 ## Common Bug Patterns
 
