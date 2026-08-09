@@ -16,6 +16,9 @@
  *   --seed-db        Force-create a seeded .beads database in the workspace
  *   --no-seed        Skip database seeding even for temp workspaces
  *   --timeout=MS     Exit after MS milliseconds (0 = no timeout, default: 0)
+ *   --webview-timeout=MS
+ *                    How long to wait for the board webview target
+ *                    (default: 180000; capped by --timeout when that is set)
  *
  * Prerequisites:
  *   npm run compile   (must be run first to build the extension)
@@ -56,6 +59,7 @@ function positional() { return cliArgs.find(a => !a.startsWith('--')); }
 
 const DEBUG_PORT = parseInt(getArg('port', '9222'), 10);
 const TIMEOUT_MS = parseInt(getArg('timeout', '0'), 10);
+const WEBVIEW_WAIT_MS = parseInt(getArg('webview-timeout', '180000'), 10);
 const SEED_DB = hasFlag('seed-db');
 const NO_SEED = hasFlag('no-seed');
 const WORKSPACE_ARG = positional();
@@ -220,7 +224,7 @@ function writeHarnessRunner(runnerDir) {
  * Returns the target info object, or null on timeout.
  */
 async function waitForWebview(port, maxWaitMs) {
-  if (maxWaitMs === undefined) { maxWaitMs = 60000; }
+  if (maxWaitMs === undefined) { maxWaitMs = 180000; }
   const startTime = Date.now();
   const interval = 2000;
 
@@ -229,11 +233,17 @@ async function waitForWebview(port, maxWaitMs) {
       const raw = await httpGet('http://localhost:' + port + '/json');
       const targets = JSON.parse(raw);
 
-      // Look for a webview target -- these have "webview" in the URL or title
+      // Only the vscode-webview:// scheme identifies a webview. Title matching
+      // is not safe here: the workbench target's title is its vscode-file:// URL,
+      // which contains the checkout path - and this repo is called Beads-Kanban.
+      // Matching on 'beads' or 'kanban' therefore hit the workbench on the first
+      // poll, returned the wrong target instantly, and meant the wait below never
+      // actually ran.
+      //
+      // Note the webview is reported with type 'iframe', not 'page', so do not
+      // filter on type either.
       const webviewTarget = targets.find(function(t) {
-        return (t.url && t.url.includes('vscode-webview')) ||
-               (t.title && t.title.toLowerCase().includes('kanban')) ||
-               (t.title && t.title.toLowerCase().includes('beads'));
+        return t.url && t.url.indexOf('vscode-webview://') === 0;
       });
 
       if (webviewTarget) {
@@ -405,9 +415,14 @@ async function main() {
   // -----------------------------------------------------------------------
   // 5. Wait for webview target
   // -----------------------------------------------------------------------
-  console.log('Waiting for Kanban board webview target (up to 60s)...');
-  console.log('  (The extension needs ~5s to activate and open the board)');
-  var webviewTarget = await waitForWebview(DEBUG_PORT, 60000);
+  // Waiting longer than the harness's own lifetime is pointless.
+  var webviewWaitMs = WEBVIEW_WAIT_MS;
+  if (TIMEOUT_MS > 0 && TIMEOUT_MS < webviewWaitMs) { webviewWaitMs = TIMEOUT_MS; }
+
+  console.log('Waiting for Kanban board webview target (up to ' + Math.round(webviewWaitMs / 1000) + 's)...');
+  console.log('  (VS Code has to boot, activate the extension and open the board.');
+  console.log('   Measured at ~65s on a cold profile - override with --webview-timeout=MS)');
+  var webviewTarget = await waitForWebview(DEBUG_PORT, webviewWaitMs);
 
   // List all available targets for diagnostics
   var allTargets = [];
@@ -420,7 +435,9 @@ async function main() {
     for (var i = 0; i < allTargets.length; i++) {
       var t = allTargets[i];
       var marker = '';
-      if (t === webviewTarget) {
+      // Compare by id, not identity: this listing re-fetches /json, so the
+      // objects are freshly parsed and never identical to the polled one.
+      if (webviewTarget && t.id === webviewTarget.id) {
         marker = ' <-- WEBVIEW';
       } else if (t.type === 'page' && t.url && t.url.includes('workbench.html')) {
         workbenchTarget = t;
