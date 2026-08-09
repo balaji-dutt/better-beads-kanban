@@ -311,10 +311,10 @@ suite('Security Tests', () => {
         test('IssueCreateSchema: Rejects description exceeding max length', () => {
             const input = {
                 title: 'Test',
-                description: 'a'.repeat(10001) // 10001 chars, max is 10000
+                description: 'a'.repeat(65537) // 65537 chars, max is 65536
             };
             const result = IssueCreateSchema.safeParse(input);
-            assert.strictEqual(result.success, false, 'Should reject description exceeding 10000 chars');
+            assert.strictEqual(result.success, false, 'Should reject description exceeding 65536 chars');
         });
 
         test('IssueCreateSchema: Rejects negative estimated_minutes', () => {
@@ -468,7 +468,7 @@ suite('Security Tests', () => {
         test('IssueCreateSchema: Handles very long valid strings', () => {
             const input = {
                 title: 'a'.repeat(500), // Exactly at max length
-                description: 'b'.repeat(10000) // Exactly at max length
+                description: 'b'.repeat(65536) // Exactly at max length
             };
             const result = IssueCreateSchema.safeParse(input);
             assert.strictEqual(result.success, true, 'Should accept strings at max length');

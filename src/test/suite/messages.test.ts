@@ -90,16 +90,39 @@ suite('Message Validation Tests', () => {
         assert.ok(!result.success, 'Invalid UUID should fail validation');
     });
 
-    test('IssueUpdateSchema: Rejects description over 10000 chars', () => {
+    test('IssueUpdateSchema: Rejects description over 65536 chars', () => {
         const invalidUpdate = {
             id: 'beads-kanban-1',
             updates: {
-                description: 'A'.repeat(10001)
+                description: 'A'.repeat(65537)
             }
         };
 
         const result = IssueUpdateSchema.safeParse(invalidUpdate);
-        assert.ok(!result.success, 'Description over 10000 chars should fail validation');
+        assert.ok(!result.success, 'Description over 65536 chars should fail validation');
+    });
+
+    // Regression: plan documents written into `design` routinely run past 10000
+    // chars. The old cap rejected the whole update payload, so even an
+    // assignee-only edit on such an issue failed.
+    test('IssueUpdateSchema: Accepts design at the 65536 cap, rejects one over', () => {
+        const atCap = {
+            id: 'beads-kanban-1',
+            updates: { design: 'A'.repeat(65536) }
+        };
+        assert.ok(
+            IssueUpdateSchema.safeParse(atCap).success,
+            'Design of exactly 65536 chars should pass validation'
+        );
+
+        const overCap = {
+            id: 'beads-kanban-1',
+            updates: { design: 'A'.repeat(65537) }
+        };
+        assert.ok(
+            !IssueUpdateSchema.safeParse(overCap).success,
+            'Design over 65536 chars should fail validation'
+        );
     });
 
     test('CommentAddSchema: Valid comment passes', () => {

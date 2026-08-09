@@ -146,8 +146,8 @@ const issueCreateTests = [
     shouldPass: true
   },
   {
-    name: 'Valid issue with max length description (10000 chars)',
-    input: { title: 'Test', description: 'x'.repeat(10000) },
+    name: 'Valid issue with max length description (65536 chars)',
+    input: { title: 'Test', description: 'x'.repeat(65536) },
     shouldPass: true
   },
   {
@@ -230,10 +230,10 @@ const issueCreateTests = [
     expectedError: 'String must contain at most 500 character(s)'
   },
   {
-    name: 'Description exceeds max length (10001 chars)',
-    input: { title: 'Test', description: 'x'.repeat(10001) },
+    name: 'Description exceeds max length (65537 chars)',
+    input: { title: 'Test', description: 'x'.repeat(65537) },
     shouldPass: false,
-    expectedError: 'String must contain at most 10000 character(s)'
+    expectedError: 'String must contain at most 65536 character(s)'
   },
   {
     name: 'Assignee exceeds max length (101 chars)',

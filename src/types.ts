@@ -252,19 +252,26 @@ export const IssueIdSchema = z.string().regex(
 );
 const BoardColumnKeySchema = z.enum(['ready', 'open', 'in_progress', 'blocked', 'closed']);
 
+// Long-text cap: 65536. These fields reach bd as single argv entries
+// (--description/--acceptance/--design/--notes in DaemonBeadsAdapter), and Linux
+// caps one argv entry at 128 KiB (MAX_ARG_STRLEN). 65536 ASCII chars is 65536
+// bytes; all-2-byte UTF-8 lands exactly at the limit. Raising this further trades
+// a clean validation error for a spawn-time E2BIG.
+const LONG_TEXT_MAX = 65536;
+
 export const IssueUpdateSchema = z.object({
   id: IssueIdSchema,
   updates: z.object({
     title: z.string().max(500).optional(),
-    description: z.string().max(10000).optional(),
+    description: z.string().max(LONG_TEXT_MAX).optional(),
     status: z.enum(['open', 'in_progress', 'blocked', 'closed']).optional(),
     priority: z.number().int().min(0).max(4).optional(),
     issue_type: z.enum(['task', 'bug', 'feature', 'epic', 'chore']).optional(),
     assignee: z.string().max(100).nullable().optional(),
     estimated_minutes: z.number().int().min(0).nullable().optional(),
-    acceptance_criteria: z.string().max(10000).optional(),
-    design: z.string().max(10000).optional(),
-    notes: z.string().max(10000).optional(),
+    acceptance_criteria: z.string().max(LONG_TEXT_MAX).optional(),
+    design: z.string().max(LONG_TEXT_MAX).optional(),
+    notes: z.string().max(LONG_TEXT_MAX).optional(),
     external_ref: z.string().max(200).nullable().optional(),
     due_at: z.union([z.string().datetime(), z.null()]).optional(),
     defer_until: z.union([z.string().datetime(), z.null()]).optional()
@@ -273,15 +280,15 @@ export const IssueUpdateSchema = z.object({
 
 export const IssueCreateSchema = z.object({
   title: z.string().min(1).max(500),
-  description: z.string().max(10000).optional(),
+  description: z.string().max(LONG_TEXT_MAX).optional(),
   status: z.enum(['open', 'in_progress', 'blocked', 'closed']).optional(),
   priority: z.number().int().min(0).max(4).optional(),
   issue_type: z.enum(['task', 'bug', 'feature', 'epic', 'chore']).optional(),
   assignee: z.string().max(100).nullable().optional(),
   estimated_minutes: z.number().int().min(0).nullable().optional(),
-  acceptance_criteria: z.string().max(10000).optional(),
-  design: z.string().max(10000).optional(),
-  notes: z.string().max(10000).optional(),
+  acceptance_criteria: z.string().max(LONG_TEXT_MAX).optional(),
+  design: z.string().max(LONG_TEXT_MAX).optional(),
+  notes: z.string().max(LONG_TEXT_MAX).optional(),
   external_ref: z.string().max(200).nullable().optional(),
   due_at: z.union([z.string().datetime(), z.null()]).optional(),
   defer_until: z.union([z.string().datetime(), z.null()]).optional(),

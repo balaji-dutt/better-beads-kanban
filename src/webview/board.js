@@ -3031,6 +3031,60 @@ async function loadFullIssue(issueId) {
 }
 
 // ============================================================================
+// EDIT FORM READ-BACK - Reads the form and works out what the user changed
+// ============================================================================
+// Reads the edit-dialog inputs into the payload shape issue.create / issue.update
+// expect. Both the pre-edit baseline snapshot and the save-time read go through
+// this one function on purpose: comparing values produced by two different code
+// paths is how dirty-field diffing grows false positives, especially on the two
+// datetime fields, which lose precision on the round trip through <input>.
+function readEditFormValues(form) {
+    return {
+        title: form.querySelector("#editTitle").value.trim(),
+        status: form.querySelector("#editStatus").value,
+        issue_type: form.querySelector("#editType").value,
+        priority: parseInt(form.querySelector("#editPriority").value),
+        assignee: form.querySelector("#editAssignee").value.trim() || null,
+        estimated_minutes: form.querySelector("#editEst").value ? parseInt(form.querySelector("#editEst").value) : null,
+        external_ref: form.querySelector("#editExtRef").value.trim() || null,
+        due_at: toIsoFromLocalInput(form.querySelector("#editDueAt").value),
+        defer_until: toIsoFromLocalInput(form.querySelector("#editDeferUntil").value),
+        description: form.querySelector("#editDesc").value,
+        acceptance_criteria: form.querySelector("#editAC").value,
+        design: form.querySelector("#editDesign").value,
+        notes: form.querySelector("#editNotes").value,
+        pinned: form.querySelector("#editPinned").checked,
+        is_template: form.querySelector("#editTemplate").checked,
+        ephemeral: form.querySelector("#editEphemeral").checked
+    };
+}
+
+// The fields IssueUpdateSchema actually accepts. pinned/is_template/ephemeral are
+// deliberately absent: they aren't in that schema, so Zod already strips them from
+// every update. Diffing them would let a pinned-only edit produce a payload that
+// validates down to {} and reaches bd with no flags.
+const UPDATABLE_EDIT_FIELDS = [
+    "title", "status", "issue_type", "priority", "assignee",
+    "estimated_minutes", "external_ref", "due_at", "defer_until",
+    "description", "acceptance_criteria", "design", "notes"
+];
+
+// Only the fields the user actually touched. Posting the whole form on every save
+// means a single oversized untouched field fails validation for the entire edit —
+// which is what made assignee-only edits impossible on issues carrying a long
+// design. Object.is rather than !== so an empty numeric input (NaN) compares equal
+// to itself and doesn't register as a change on every save.
+function diffEditFormValues(baseline, current) {
+    const updates = {};
+    for (const key of UPDATABLE_EDIT_FIELDS) {
+        if (!Object.is(current[key], baseline[key])) {
+            updates[key] = current[key];
+        }
+    }
+    return updates;
+}
+
+// ============================================================================
 // STATIC FORM POPULATION - Populates the static HTML form with card data
 // ============================================================================
 function populateStaticEditForm(form, card, isCreateMode) {
@@ -3592,6 +3646,9 @@ async function openDetail(card) {
     // The form HTML is now defined statically in webview.ts
     populateStaticEditForm(form, card, isCreateMode);
 
+    // Snapshot the form as loaded so save can send only what changed.
+    const baselineValues = readEditFormValues(form);
+
     detailDirty = false;
     const dirtyFieldIds = [
         "editTitle",
@@ -3632,24 +3689,10 @@ async function openDetail(card) {
         if (btnSave.disabled) { return; }
         btnSave.disabled = true;
         try {
-        const data = {
-            title: form.querySelector("#editTitle").value.trim(),
-            status: form.querySelector("#editStatus").value,
-            issue_type: form.querySelector("#editType").value,
-            priority: parseInt(form.querySelector("#editPriority").value),
-            assignee: form.querySelector("#editAssignee").value.trim() || null,
-            estimated_minutes: form.querySelector("#editEst").value ? parseInt(form.querySelector("#editEst").value) : null,
-            external_ref: form.querySelector("#editExtRef").value.trim() || null,
-            due_at: toIsoFromLocalInput(form.querySelector("#editDueAt").value),
-            defer_until: toIsoFromLocalInput(form.querySelector("#editDeferUntil").value),
-            description: form.querySelector("#editDesc").value,
-            acceptance_criteria: form.querySelector("#editAC").value,
-            design: form.querySelector("#editDesign").value,
-            notes: form.querySelector("#editNotes").value,
-            pinned: form.querySelector("#editPinned").checked,
-            is_template: form.querySelector("#editTemplate").checked,
-            ephemeral: form.querySelector("#editEphemeral").checked
-        };
+        const current = readEditFormValues(form);
+
+        // Create sends the whole form; update sends only what the user changed.
+        let data = current;
 
         // In create mode, include labels, parent, blockers, and children
         if (isCreateMode) {
@@ -3665,9 +3708,19 @@ async function openDetail(card) {
             if (card.children && card.children.length > 0) {
                 data.children_ids = card.children.map(c => c.id);
             }
+        } else {
+            data = diffEditFormValues(baselineValues, current);
+            if (current.title && Object.keys(data).length === 0) {
+                toast("No changes to save");
+                detailDirty = false;
+                detDialog.close();
+                return;
+            }
         }
 
-        if (data.title) {
+        // Guard on the form value, not the diff: an unchanged title is absent from
+        // an update payload but is still a valid title.
+        if (current.title) {
             try {
                 if (isCreateMode) {
                     // Create new issue
