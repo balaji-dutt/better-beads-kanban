@@ -47,7 +47,6 @@ npm install
 *   **Run All Tests:** `npm test`
 *   **Unit/Integration:** `npm run test:adapter`
 *   **Validation:** `npm run test:validation`
-*   **Performance Benchmarks:** `node --expose-gc scripts/benchmark-loading.js test-databases/test-db-10k.db`
 
 ## Architecture
 The extension follows a clean 3-layer architecture:

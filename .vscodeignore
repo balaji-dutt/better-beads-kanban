@@ -60,8 +60,6 @@ inspect_schema.js
 *.py
 
 # Test Data & Results
-benchmark-results/**
-test-databases/**
 test-screenshots/**
 coverage/**
 .serena/**

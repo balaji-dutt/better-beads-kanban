@@ -52,8 +52,6 @@ dist/
 # Test reports and generated files
 *-report.md
 test-summary.md
-benchmark-results/
-test-databases/
 
 # IDE and editor files
 .serena/
