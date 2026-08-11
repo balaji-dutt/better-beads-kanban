@@ -345,6 +345,8 @@ suite('DaemonBeadsAdapter Integration Tests', () => {
                 issue_type: 'task'
             });
 
+            // ephemeral on its own: the main bd call is skipped entirely, since
+            // 'update <id>' with no flags would be a no-op invocation.
             await adapter.updateIssue(created.id, { ephemeral: true });
             const marked = await adapter.getIssueFull(created.id);
             assert.strictEqual(marked.ephemeral, true, 'ephemeral should persist through update');
@@ -352,6 +354,16 @@ suite('DaemonBeadsAdapter Integration Tests', () => {
             await adapter.updateIssue(created.id, { ephemeral: false });
             const promoted = await adapter.getIssueFull(created.id);
             assert.strictEqual(promoted.ephemeral, false, 'ephemeral should clear via --persistent');
+
+            // ephemeral alongside a normal field: two separate bd calls, both applied.
+            // The split exists so a bd-side wisp failure cannot discard the title.
+            await adapter.updateIssue(created.id, {
+                title: 'Renamed while toggling ephemeral',
+                ephemeral: true
+            });
+            const combined = await adapter.getIssueFull(created.id);
+            assert.strictEqual(combined.title, 'Renamed while toggling ephemeral', 'title should persist alongside ephemeral');
+            assert.strictEqual(combined.ephemeral, true, 'ephemeral should persist alongside a field update');
 
             await adapter.setIssueStatus(created.id, 'closed');
         } catch (err) {

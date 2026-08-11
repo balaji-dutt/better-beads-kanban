@@ -1790,21 +1790,42 @@ export class DaemonBeadsAdapter {
         ? ['--set-metadata', 'template=true']
         : ['--unset-metadata', 'template']));
     }
-    // ephemeral is a first-class bd field, not metadata. --persistent is the
-    // documented inverse: it promotes a wisp back to a regular issue.
-    if (updates.ephemeral !== undefined) {
-      args.push(updates.ephemeral ? '--ephemeral' : '--persistent');
+    // 'update <id>' with no flags is a no-op call; only run it if something set one.
+    if (args.length > 2) {
+      try {
+        await this.execBd(args);
+
+        // Track mutation and invalidate cache
+        this.trackMutation();
+      } catch (error) {
+        const msg = `Failed to update issue: ${error instanceof Error ? error.message : String(error)}`;
+        this.output.appendLine(`[DaemonBeadsAdapter] ERROR: ${msg}`);
+        throw new Error(msg);
+      }
     }
 
-    try {
-      await this.execBd(args);
-
-      // Track mutation and invalidate cache
-      this.trackMutation();
-    } catch (error) {
-      const msg = `Failed to update issue: ${error instanceof Error ? error.message : String(error)}`;
-      this.output.appendLine(`[DaemonBeadsAdapter] ERROR: ${msg}`);
-      throw new Error(msg);
+    // ephemeral is a first-class bd field rather than metadata, toggled with
+    // --ephemeral and its documented inverse --persistent.
+    //
+    // It goes in a separate bd call on purpose. bd's wisp demotion path can fail
+    // inside bd itself - observed as "Unknown column 'id' in 'wisp_dependencies'"
+    // on one long-lived database, while a freshly initialised one handles the same
+    // operation fine. Whether that column is missing because of an upstream schema
+    // bug or because of past manual recovery on that particular database is not
+    // established, so treat it as "bd can fail here", not as a known defect.
+    //
+    // Either way the split is what matters: bundled into the call above, any
+    // bd-side failure on this flag would discard every other field in the save.
+    if (updates.ephemeral !== undefined) {
+      try {
+        await this.execBd(['update', id, updates.ephemeral ? '--ephemeral' : '--persistent']);
+        this.trackMutation();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const msg = `Ephemeral could not be changed (all other fields saved): ${detail}`;
+        this.output.appendLine(`[DaemonBeadsAdapter] ERROR: ${msg}`);
+        throw new Error(msg);
+      }
     }
   }
 
