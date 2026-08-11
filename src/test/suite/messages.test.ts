@@ -125,6 +125,21 @@ suite('Message Validation Tests', () => {
         );
     });
 
+    // Regression: these three were absent from IssueUpdateSchema, so Zod stripped
+    // them and the edit dialog's checkboxes silently did nothing on save.
+    test('IssueUpdateSchema: Accepts pinned, is_template and ephemeral', () => {
+        const update = {
+            id: 'beads-kanban-1',
+            updates: { pinned: true, is_template: false, ephemeral: true }
+        };
+
+        const result = IssueUpdateSchema.safeParse(update);
+        assert.ok(result.success, 'Boolean flags should pass validation');
+        assert.strictEqual(result.data?.updates.pinned, true, 'pinned should survive parsing');
+        assert.strictEqual(result.data?.updates.is_template, false, 'is_template should survive parsing');
+        assert.strictEqual(result.data?.updates.ephemeral, true, 'ephemeral should survive parsing');
+    });
+
     test('CommentAddSchema: Valid comment passes', () => {
         const validComment = {
             id: 'beads-kanban-1',

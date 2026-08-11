@@ -3059,14 +3059,14 @@ function readEditFormValues(form) {
     };
 }
 
-// The fields IssueUpdateSchema actually accepts. pinned/is_template/ephemeral are
-// deliberately absent: they aren't in that schema, so Zod already strips them from
-// every update. Diffing them would let a pinned-only edit produce a payload that
+// The fields IssueUpdateSchema accepts. Keep in sync with it: anything missing
+// there is stripped by Zod, so listing it here would send a payload that
 // validates down to {} and reaches bd with no flags.
 const UPDATABLE_EDIT_FIELDS = [
     "title", "status", "issue_type", "priority", "assignee",
     "estimated_minutes", "external_ref", "due_at", "defer_until",
-    "description", "acceptance_criteria", "design", "notes"
+    "description", "acceptance_criteria", "design", "notes",
+    "pinned", "is_template", "ephemeral"
 ];
 
 // Only the fields the user actually touched. Posting the whole form on every save

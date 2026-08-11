@@ -1722,6 +1722,9 @@ export class DaemonBeadsAdapter {
     due_at?: string | null;
     defer_until?: string | null;
     status?: string;
+    pinned?: boolean;
+    is_template?: boolean;
+    ephemeral?: boolean;
   }): Promise<void> {
     this.validateIssueId(id);
 
@@ -1773,6 +1776,25 @@ export class DaemonBeadsAdapter {
       }
     }
     if (updates.status !== undefined) {args.push('--status', updates.status);}
+
+    // bd >= 1.0 has no --pinned/--template flags; these live in issue metadata,
+    // matching how createIssue persists them and how readBoolFromMetadata reads
+    // them back. Unset rather than writing false, so no stale keys accumulate.
+    if (updates.pinned !== undefined) {
+      args.push(...(updates.pinned
+        ? ['--set-metadata', 'pinned=true']
+        : ['--unset-metadata', 'pinned']));
+    }
+    if (updates.is_template !== undefined) {
+      args.push(...(updates.is_template
+        ? ['--set-metadata', 'template=true']
+        : ['--unset-metadata', 'template']));
+    }
+    // ephemeral is a first-class bd field, not metadata. --persistent is the
+    // documented inverse: it promotes a wisp back to a regular issue.
+    if (updates.ephemeral !== undefined) {
+      args.push(updates.ephemeral ? '--ephemeral' : '--persistent');
+    }
 
     try {
       await this.execBd(args);

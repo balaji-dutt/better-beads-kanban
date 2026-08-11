@@ -297,6 +297,69 @@ suite('DaemonBeadsAdapter Integration Tests', () => {
         }
     });
 
+    // Regression: pinned/is_template were missing from IssueUpdateSchema, so the
+    // edit dialog's checkboxes never persisted. A schema-only test would not have
+    // caught it - the values were valid, just unknown, and Zod dropped them
+    // silently. This drives the real bd round trip instead.
+    test('Update round-trips pinned and is_template', async function() {
+        this.timeout(30000);
+
+        try {
+            const created = await adapter.createIssue({
+                title: 'Test flag round trip',
+                priority: 2,
+                issue_type: 'task'
+            });
+
+            const initial = await adapter.getIssueFull(created.id);
+            assert.strictEqual(initial.pinned, false, 'Should start unpinned');
+            assert.strictEqual(initial.is_template, false, 'Should start as a non-template');
+
+            await adapter.updateIssue(created.id, { pinned: true, is_template: true });
+            const set = await adapter.getIssueFull(created.id);
+            assert.strictEqual(set.pinned, true, 'pinned should persist through update');
+            assert.strictEqual(set.is_template, true, 'is_template should persist through update');
+
+            await adapter.updateIssue(created.id, { pinned: false, is_template: false });
+            const cleared = await adapter.getIssueFull(created.id);
+            assert.strictEqual(cleared.pinned, false, 'pinned should clear through update');
+            assert.strictEqual(cleared.is_template, false, 'is_template should clear through update');
+
+            await adapter.setIssueStatus(created.id, 'closed');
+        } catch (err) {
+            skipIfNoBd(err, this);
+            throw err;
+        }
+    });
+
+    // Separate from the pair above: ephemeral is a first-class bd field rather
+    // than metadata, and --persistent (the inverse) promotes a wisp back to a
+    // regular issue, so the read-back is asserted rather than assumed symmetric.
+    test('Update round-trips ephemeral', async function() {
+        this.timeout(30000);
+
+        try {
+            const created = await adapter.createIssue({
+                title: 'Test ephemeral round trip',
+                priority: 2,
+                issue_type: 'task'
+            });
+
+            await adapter.updateIssue(created.id, { ephemeral: true });
+            const marked = await adapter.getIssueFull(created.id);
+            assert.strictEqual(marked.ephemeral, true, 'ephemeral should persist through update');
+
+            await adapter.updateIssue(created.id, { ephemeral: false });
+            const promoted = await adapter.getIssueFull(created.id);
+            assert.strictEqual(promoted.ephemeral, false, 'ephemeral should clear via --persistent');
+
+            await adapter.setIssueStatus(created.id, 'closed');
+        } catch (err) {
+            skipIfNoBd(err, this);
+            throw err;
+        }
+    });
+
     test('Get full issue for non-existent ID should fail', async function() {
         this.timeout(10000);
         let threw = false;

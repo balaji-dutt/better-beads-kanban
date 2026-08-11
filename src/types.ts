@@ -274,7 +274,12 @@ export const IssueUpdateSchema = z.object({
     notes: z.string().max(LONG_TEXT_MAX).optional(),
     external_ref: z.string().max(200).nullable().optional(),
     due_at: z.union([z.string().datetime(), z.null()]).optional(),
-    defer_until: z.union([z.string().datetime(), z.null()]).optional()
+    defer_until: z.union([z.string().datetime(), z.null()]).optional(),
+    // Present in IssueCreateSchema from the start; missing here until now, so
+    // Zod stripped them and the edit dialog's checkboxes never persisted.
+    pinned: z.boolean().optional(),
+    is_template: z.boolean().optional(),
+    ephemeral: z.boolean().optional()
   })
 });
 
