@@ -329,6 +329,11 @@ let detailDirty = false;
 let openDetailGeneration = 0;
 function markDetailDirty() { detailDirty = true; }
 
+// Snapshot of the edit form as loaded, used both to diff on save and to decide
+// whether closing would actually discard anything. Module-scoped because the
+// close handlers live outside openDetail.
+let editBaselineValues = null;
+
 // Phase 2: Client-side card cache for fast filtering/sorting
 // Maps card ID to card data (MinimalCard, EnrichedCard, or FullCard)
 const cardCache = new Map();
@@ -364,23 +369,64 @@ function debounce(func, wait) {
     };
 }
 
-function requestDetailClose() {
-    const editFormDirty = window.__editFormDirty?.isDirty?.() || false;
-    if (!detailDirty && !editFormDirty) {
+/**
+ * Whether the edit form differs from what was loaded into it.
+ *
+ * markDetailDirty is one-way - any keystroke sets it and only a successful save
+ * clears it - so typing a character and deleting it used to leave the dialog
+ * permanently "dirty". Comparing against the baseline snapshot instead means
+ * reverting an edit genuinely un-dirties the form.
+ */
+function isEditFormDirty() {
+    if (!detDialog) { return false; }
+    const form = detDialog.querySelector("form");
+    if (!form || !editBaselineValues) { return detailDirty; }
+    try {
+        return Object.keys(diffEditFormValues(editBaselineValues, readEditFormValues(form))).length > 0;
+    } catch (_e) {
+        return detailDirty;
+    }
+}
+
+/**
+ * Ask the extension host to confirm discarding unsaved edits.
+ *
+ * window.confirm is stubbed out in VS Code webviews: it returns false straight
+ * away without showing anything. This guard therefore could never be satisfied,
+ * so a dialog with unsaved changes could not be closed by Escape or by clicking
+ * outside it at all - the only way out was to revert the edit and save.
+ *
+ * Resolves false on timeout, which keeps the dialog open rather than silently
+ * discarding work.
+ */
+function confirmDiscard() {
+    return new Promise((resolve) => {
+        const reqId = requestId();
+        const timeoutId = setTimeout(() => {
+            if (pendingRequests.has(reqId)) {
+                pendingRequests.delete(reqId);
+                resolve(false);
+            }
+        }, 30000);
+        pendingRequests.set(reqId, { resolve, timeoutId });
+        vscode.postMessage({ type: "ui.confirmDiscard", requestId: reqId });
+    });
+}
+
+async function requestDetailClose() {
+    if (!isEditFormDirty()) {
         detDialog.close();
         return;
     }
-    const shouldClose = confirm("Discard unsaved changes?");
-    if (shouldClose) {
+    if (await confirmDiscard()) {
         detailDirty = false;
-        if (window.__editFormDirty?.reset) { window.__editFormDirty.reset(); }
+        editBaselineValues = null;
         detDialog.close();
     }
 }
 
 detDialog.addEventListener("cancel", (event) => {
-    const editFormDirty = window.__editFormDirty?.isDirty?.() || false;
-    if (!detailDirty && !editFormDirty) {
+    if (!isEditFormDirty()) {
         return;
     }
     event.preventDefault();
@@ -2973,6 +3019,20 @@ window.addEventListener("message", (event) => {
         return;
     }
 
+    // Reply to ui.confirmDiscard. It needs its own type because mutation.ok
+    // resolves with no value, and this one has to carry the user's answer.
+    if (msg.type === "ui.confirm.result") {
+        if (msg.requestId && pendingRequests.has(msg.requestId)) {
+            const { resolve, timeoutId } = pendingRequests.get(msg.requestId);
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            pendingRequests.delete(msg.requestId);
+            resolve(Boolean(msg.payload && msg.payload.confirmed));
+        }
+        return;
+    }
+
     if (msg.type === "mutation.ok") {
         // Resolve pending request
         if (msg.requestId && pendingRequests.has(msg.requestId)) {
@@ -3653,7 +3713,7 @@ async function openDetail(card) {
     populateStaticEditForm(form, card, isCreateMode);
 
     // Snapshot the form as loaded so save can send only what changed.
-    const baselineValues = readEditFormValues(form);
+    editBaselineValues = readEditFormValues(form);
 
     detailDirty = false;
     const dirtyFieldIds = [
@@ -3725,7 +3785,7 @@ async function openDetail(card) {
                 data.children_ids = card.children.map(c => c.id);
             }
         } else {
-            data = diffEditFormValues(baselineValues, current);
+            data = diffEditFormValues(editBaselineValues, current);
             if (current.title && Object.keys(data).length === 0) {
                 toast("No changes to save");
                 detailDirty = false;

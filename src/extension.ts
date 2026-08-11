@@ -47,7 +47,8 @@ type WebMsg =
   | { type: "issue.removeLabel"; requestId: string; payload: { id: string; label: string } }
   | { type: "issue.addDependency"; requestId: string; payload: { id: string; otherId: string; type: 'parent-child' | 'blocks' } }
   | { type: "issue.removeDependency"; requestId: string; payload: { id: string; otherId: string } }
-  | { type: "state.uiState"; requestId: string; payload: UIState };
+  | { type: "state.uiState"; requestId: string; payload: UIState }
+  | { type: "ui.confirmDiscard"; requestId: string };
 
 type ExtMsg =
   | { type: "board.data"; requestId: string; payload: BoardData }
@@ -56,6 +57,7 @@ type ExtMsg =
   | { type: "table.pageData"; requestId: string; payload: { cards: BoardCard[]; offset: number; totalCount: number; hasMore: boolean } }
   | { type: "issue.full"; requestId: string; payload: { card: FullCard } }
   | { type: "mutation.ok"; requestId: string; payload?: unknown }
+  | { type: "ui.confirm.result"; requestId: string; payload: { confirmed: boolean } }
   | { type: "mutation.error"; requestId: string; error: string };
 
 // Size limits for text operations
@@ -790,6 +792,23 @@ export function activate(context: vscode.ExtensionContext) {
             post({ type: "mutation.ok", requestId: msg.requestId });
             vscode.window.showInformationMessage("Issue context copied to clipboard.");
             return;
+        }
+
+        // The webview cannot prompt for itself: window.confirm is stubbed out in
+        // VS Code webviews and returns false without showing anything, which made
+        // the edit dialog's discard guard impossible to satisfy.
+        if (msg.type === "ui.confirmDiscard") {
+          const choice = await vscode.window.showWarningMessage(
+            "Discard unsaved changes?",
+            { modal: true },
+            "Discard"
+          );
+          post({
+            type: "ui.confirm.result",
+            requestId: msg.requestId,
+            payload: { confirmed: choice === "Discard" }
+          });
+          return;
         }
 
         if (msg.type === "issue.update") {
