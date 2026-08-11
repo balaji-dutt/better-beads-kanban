@@ -5,6 +5,26 @@ All notable changes to the Beads Kanban extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4-bd.3] - 2026-08-09
+
+Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
+
+### 🐛 Bug Fixes
+
+- **The Pinned, Template and Ephemeral checkboxes now work when editing an issue.** They were missing from `IssueUpdateSchema`, and Zod strips unknown keys, so the values were discarded before reaching `bd` — the boxes looked functional and persisted nothing. Create and read had always handled them; only the update path was blind. `pinned` and `template` are written to issue metadata (where `bd` 1.0+ keeps them, since it dropped the `--pinned`/`--template` flags), and `ephemeral` uses `--ephemeral` with its inverse `--persistent`.
+
+### 🧹 Cleanup
+
+- **Removed the SQLite-era test tooling.** `bd` 1.x dropped SQLite for Dolt, so `scripts/generate-test-db.js` and `scripts/benchmark-loading.js` could no longer produce a database the extension can read. The latter was doubly dead — it required `sql.js`, which was never a dependency. Their tracked benchmark reports and ~220 lines of `TESTING.md` went with them.
+- **Deleted two dead duplicates of the board.** `src/webview/editForm.js` (~1000 lines) was imported by nothing and never reached a bundle; `media/board.js` (~2875 lines) was a stale pre-bundling copy that `webview.ts` does not load. A bug in the edit dialog was recently diagnosed against `editForm.js`, which is not the code that runs.
+- **Dropped `better-sqlite3`, `@electron/rebuild` and `node-gyp`.** The visual test harness was the last consumer, and the other two existed only to build it. No native modules remain.
+
+### 🔧 Internal
+
+- **The `DaemonBeadsAdapter` integration tests actually run now.** They drive a real `bd` CLI and this repo has no `.beads` database, so all six were skipping. The suite builds a throwaway Dolt database in a temp directory and seeds it. Local runs go from 378 passing / 7 pending to 387 / 1.
+- **The visual test harness seeds through the `bd` CLI** instead of hand-writing SQLite tables, so its board is no longer empty. It also now identifies the webview by the `vscode-webview://` scheme: the previous title match caught the workbench, because the checkout directory is called `Beads-Kanban`, and advertised the wrong CDP target.
+- CI runs on `integration/bd-fixes`, and `actions/checkout` / `actions/setup-node` moved to v7 to clear the Node 20 runtime deprecation.
+
 ## [2.1.4-bd.2] - 2026-08-09
 
 Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
