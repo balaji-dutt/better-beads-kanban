@@ -80,12 +80,44 @@ suite('Webview Security Tests', () => {
         assert.ok(html.includes('purify'), 'HTML should include DOMPurify library');
     });
 
-    test.skip('HTML Entities: Title input has maxlength', () => {
-        // NOTE: This test is skipped because the newTitle input is created dynamically
-        // in the webview JavaScript, not in the static HTML template
+    // Replaces a test skipped since v0.0.3 because it looked for an input id
+    // ("newTitle") that no longer exists anywhere in the source - so un-skipping
+    // it would only have failed on a missing element. The concern it was written
+    // for is real: an input that accepts more than the schema allows becomes a
+    // save-time validation failure, which is exactly how the unbounded estimate
+    // field bit us.
+    //
+    // Bounds are asserted only on short single-line inputs. The markdown
+    // textareas are deliberately left unbounded: maxlength truncates a paste
+    // silently, and quietly losing part of a pasted plan document is worse than
+    // a clear "Too big" message on save.
+    test('Field bounds: capped text inputs carry a matching maxlength', () => {
         const html = getWebviewHtml(mockWebview, mockUri);
-        const titleInput = html.match(/<input[^>]*id="newTitle"[^>]*>/);
-        assert.ok(titleInput, 'Should have title input');
-        assert.ok(titleInput[0].includes('maxlength'), 'Title input should have maxlength attribute');
+
+        const bounded: Array<[string, number]> = [
+            ['editTitle', 500],      // IssueUpdateSchema: title max 500
+            ['editAssignee', 100],   // assignee max 100
+            ['editExtRef', 200]      // external_ref max 200
+        ];
+
+        for (const [id, cap] of bounded) {
+            const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`));
+            assert.ok(input, `Should have an input with id="${id}"`);
+            assert.ok(
+                input![0].includes(`maxlength="${cap}"`),
+                `#${id} should carry maxlength="${cap}" to match the schema, got: ${input![0]}`
+            );
+        }
+    });
+
+    test('Field bounds: the estimate input cannot go negative', () => {
+        const html = getWebviewHtml(mockWebview, mockUri);
+        const input = html.match(/<input[^>]*id="editEst"[^>]*>/);
+
+        assert.ok(input, 'Should have an input with id="editEst"');
+        assert.ok(
+            input![0].includes('min="0"'),
+            `#editEst should carry min="0"; the schema rejects negatives, got: ${input![0]}`
+        );
     });
 });

@@ -232,7 +232,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
         <!-- Row 1: Title -->
         <div class="form-row">
           <label class="form-label" for="editTitle">Title:</label>
-          <input id="editTitle" type="text" class="form-input-title" placeholder="Issue title" />
+          <input id="editTitle" type="text" maxlength="500" class="form-input-title" placeholder="Issue title" />
         </div>
 
         <!-- Row 2: Status, Type, Priority, Assignee -->
@@ -269,7 +269,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
           </div>
           <div class="form-group-large">
             <label class="form-label" for="editAssignee">Assignee:</label>
-            <input id="editAssignee" type="text" placeholder="Unassigned" class="form-input-inline" />
+            <input id="editAssignee" type="text" maxlength="100" placeholder="Unassigned" class="form-input-inline" />
           </div>
         </div>
 
@@ -321,7 +321,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
         <!-- Row 6: Ext Ref -->
         <div class="form-row-wide-label">
           <label class="form-label" for="editExtRef">Ext Ref:</label>
-          <input id="editExtRef" type="text" placeholder="JIRA-123" class="form-input-full" />
+          <input id="editExtRef" type="text" maxlength="200" placeholder="JIRA-123" class="form-input-full" />
         </div>
 
         <hr class="form-hr">
