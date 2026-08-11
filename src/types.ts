@@ -493,3 +493,20 @@ export interface GraphLayoutOptions {
   focusNodeId?: string;
   focusDepth?: number;
 }
+
+/**
+ * Render a Zod failure as something a user can act on.
+ *
+ * `error.message` is a JSON dump of the issue array, which reaches the webview
+ * toast verbatim and reads like a stack trace. This flattens it to
+ * `field: reason`, dropping the `updates` wrapper from the path since it is an
+ * implementation detail of the message envelope, not a field the user sees.
+ */
+export function describeValidationError(error: z.ZodError): string {
+  return error.issues
+    .map(issue => {
+      const field = issue.path.filter(segment => segment !== 'updates').join('.');
+      return field ? `${field}: ${issue.message}` : issue.message;
+    })
+    .join('; ');
+}

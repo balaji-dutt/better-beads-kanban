@@ -3059,6 +3059,12 @@ function readEditFormValues(form) {
     };
 }
 
+function blurNumberInputOnWheel(e) {
+    if (document.activeElement === e.currentTarget) {
+        e.currentTarget.blur();
+    }
+}
+
 // The fields IssueUpdateSchema accepts. Keep in sync with it: anything missing
 // there is stripped by Zod, so listing it here would send a payload that
 // validates down to {} and reaches bd with no flags.
@@ -3675,6 +3681,16 @@ async function openDetail(card) {
         field.removeEventListener("change", markDetailDirty);
         field.addEventListener("input", markDetailDirty);
         field.addEventListener("change", markDetailDirty);
+
+        // Chromium steps a focused number input on wheel events. The edit form
+        // scrolls, so scrolling with the pointer over "Est. Minutes" silently
+        // edits it - which is how an estimate ends up negative without anyone
+        // typing. Blurring on wheel lets the dialog scroll and leaves the value
+        // alone.
+        if (field.type === "number") {
+            field.removeEventListener("wheel", blurNumberInputOnWheel);
+            field.addEventListener("wheel", blurNumberInputOnWheel, { passive: true });
+        }
     });
 
     // Bind events

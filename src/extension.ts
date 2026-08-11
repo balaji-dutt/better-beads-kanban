@@ -10,6 +10,7 @@ import {
   FullCard,
   BoardColumnKey,
   IssueStatus,
+  describeValidationError,
   IssueUpdateSchema,
   IssueCreateSchema,
   CommentAddSchema,
@@ -417,7 +418,7 @@ export function activate(context: vscode.ExtensionContext) {
         // Validate the request
         const validation = BoardLoadColumnSchema.safeParse({ column, offset, limit });
         if (!validation.success) {
-          post({ type: "mutation.error", requestId, error: `Invalid loadColumn request: ${validation.error.message}` });
+          post({ type: "mutation.error", requestId, error: `Invalid loadColumn request: ${describeValidationError(validation.error)}` });
           return;
         }
 
@@ -465,7 +466,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!validation.success) {
           // Check cancellation before posting error
           if (!cancellationToken.cancelled) {
-            post({ type: "mutation.error", requestId, error: `Invalid loadMore request: ${validation.error.message}` });
+            post({ type: "mutation.error", requestId, error: `Invalid loadMore request: ${describeValidationError(validation.error)}` });
           }
           return;
         }
@@ -550,7 +551,7 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           const validation = UIStateSchema.safeParse(msg.payload);
           if (!validation.success) {
-            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid UI state: ${validation.error.message}` });
+            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid UI state: ${describeValidationError(validation.error)}` });
             return;
           }
           await context.workspaceState.update('beadsKanban.uiState', validation.data);
@@ -731,7 +732,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (msg.type === "issue.create") {
           const validation = IssueCreateSchema.safeParse(msg.payload);
           if (!validation.success) {
-            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid issue data: ${validation.error.message}` });
+            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid issue data: ${describeValidationError(validation.error)}` });
             return;
           }
           
@@ -759,7 +760,7 @@ export function activate(context: vscode.ExtensionContext) {
             status: toStatus
           });
           if (!validation.success) {
-            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid move data: ${validation.error.message}` });
+            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid move data: ${describeValidationError(validation.error)}` });
             return;
           }
           await adapter.setIssueStatus(validation.data.id, validation.data.status);
@@ -794,7 +795,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (msg.type === "issue.update") {
           const validation = IssueUpdateSchema.safeParse(msg.payload);
           if (!validation.success) {
-            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid update data: ${validation.error.message}` });
+            post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid update data: ${describeValidationError(validation.error)}` });
             return;
           }
           
@@ -828,7 +829,7 @@ export function activate(context: vscode.ExtensionContext) {
               author
             });
             if (!validation.success) {
-              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid comment data: ${validation.error.message}` });
+              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid comment data: ${describeValidationError(validation.error)}` });
               return;
             }
             
@@ -852,7 +853,7 @@ export function activate(context: vscode.ExtensionContext) {
               label: msg.payload.label
             });
             if (!validation.success) {
-              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid label data: ${validation.error.message}` });
+              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid label data: ${describeValidationError(validation.error)}` });
               return;
             }
             await adapter.addLabel(validation.data.id, validation.data.label);
@@ -867,7 +868,7 @@ export function activate(context: vscode.ExtensionContext) {
               label: msg.payload.label
             });
             if (!validation.success) {
-              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid label data: ${validation.error.message}` });
+              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid label data: ${describeValidationError(validation.error)}` });
               return;
             }
             await adapter.removeLabel(validation.data.id, validation.data.label);
@@ -883,7 +884,7 @@ export function activate(context: vscode.ExtensionContext) {
               type: msg.payload.type
             });
             if (!validation.success) {
-              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid dependency data: ${validation.error.message}` });
+              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid dependency data: ${describeValidationError(validation.error)}` });
               return;
             }
             await adapter.addDependency(validation.data.id, validation.data.otherId, validation.data.type);
@@ -898,7 +899,7 @@ export function activate(context: vscode.ExtensionContext) {
               otherId: msg.payload.otherId
             });
             if (!validation.success) {
-              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid dependency data: ${validation.error.message}` });
+              post({ type: "mutation.error", requestId: msg.requestId, error: `Invalid dependency data: ${describeValidationError(validation.error)}` });
               return;
             }
             await adapter.removeDependency(validation.data.id, validation.data.otherId);

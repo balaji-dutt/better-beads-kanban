@@ -11,7 +11,8 @@ import {
     STATUS_ALL_VALUES,
     STATUS_ACTIVE_VALUES,
     PRIORITY_ALL_VALUES,
-    TYPE_ALL_VALUES
+    TYPE_ALL_VALUES,
+    describeValidationError
 } from '../../types';
 
 suite('Message Validation Tests', () => {
@@ -138,6 +139,22 @@ suite('Message Validation Tests', () => {
         assert.strictEqual(result.data?.updates.pinned, true, 'pinned should survive parsing');
         assert.strictEqual(result.data?.updates.is_template, false, 'is_template should survive parsing');
         assert.strictEqual(result.data?.updates.ephemeral, true, 'ephemeral should survive parsing');
+    });
+
+    // The raw error.message is a JSON dump of the issue array, which used to
+    // reach the toast verbatim and read like a stack trace.
+    test('describeValidationError: renders field and reason, not JSON', () => {
+        const result = IssueUpdateSchema.safeParse({
+            id: 'beads-kanban-1',
+            updates: { estimated_minutes: -3 }
+        });
+
+        assert.ok(!result.success, 'A negative estimate should fail validation');
+        const described = describeValidationError(result.error!);
+
+        assert.ok(described.startsWith('estimated_minutes:'), `Should name the field, got: ${described}`);
+        assert.ok(!described.includes('{'), `Should not contain raw JSON, got: ${described}`);
+        assert.ok(!described.includes('"code"'), `Should not contain Zod issue codes, got: ${described}`);
     });
 
     test('CommentAddSchema: Valid comment passes', () => {

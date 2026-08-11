@@ -277,7 +277,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
         <div class="form-row-multi">
           <div class="form-group">
             <label class="form-label" for="editEst">Est. Minutes:</label>
-            <input id="editEst" type="number" placeholder="Min" class="form-input-inline" />
+            <input id="editEst" type="number" min="0" step="1" placeholder="Min" class="form-input-inline" />
           </div>
           <div class="form-group">
             <label class="form-label" for="editDueAt">Due At:</label>
