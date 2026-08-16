@@ -1,14 +1,14 @@
 {
-  "name": "beads-kanban-bd-fixes",
-  "displayName": "Beads Kanban (BD Fixes)",
-  "description": "Visual Kanban board for Beads issue tracking - view and manage your .beads issues in VS Code",
+  "name": "better-beads-kanban",
+  "displayName": "Better Beads Kanban",
+  "description": "Kanban, table, tree and graph views for Beads (bd) issues in VS Code, updated for bd 1.x and Dolt-backed repositories",
   "repository": {
     "type": "git",
     "url": "https://github.com/balaji-dutt/Beads-Kanban.git"
   },
   "author": {
-    "name": "David Forbes",
-    "url": "https://github.com/davidcforbes"
+    "name": "balaji-dutt",
+    "url": "https://github.com/balaji-dutt"
   },
   "license": "MIT",
   "homepage": "https://github.com/balaji-dutt/Beads-Kanban",
@@ -25,9 +25,6 @@
   "version": "2.1.4-bd.5",
   "publisher": "balaji-dutt",
   "pricing": "Free",
-  "sponsor": {
-    "url": "https://github.com/sponsors/davidcforbes"
-  },
   "icon": "images/icon.png",
   "engines": {
     "node": ">=20.0.0",
@@ -49,7 +46,7 @@
       }
     ],
     "configuration": {
-      "title": "Agent Native Abstraction Layer for Beads",
+      "title": "Better Beads Kanban",
       "properties": {
         "beadsKanban.bdPath": {
           "type": "string",
