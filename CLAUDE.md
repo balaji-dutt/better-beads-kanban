@@ -768,6 +768,18 @@ To debug, keep source maps in the VSIX by removing `**/*.map` from `.vscodeignor
 - Markdown preview uses marked.js with GFM and DOMPurify sanitization.
 - **Webview cache-busting:** The version in `src/webview.ts` must match `package.json` version for proper cache invalidation.
 - **Windows packaging:** Always use PowerShell, not Git Bash, for `vsce package` command.
-- **Current version:** 2.1.2 (published to VS Code Marketplace 2026-03-28)
-- **Visual testing:** Run `npm run test:visual-server` to launch the standalone visual test server with mock data in Chrome. Use Chrome DevTools MCP to automate visual validation. Note: Chrome DevTools MCP does NOT work with VS Code's Electron webviews (Puppeteer's `Target.getDevToolsTarget` is unsupported in Electron). The standalone server renders the same webview code in regular Chrome where MCP works.
+- **Current version:** 2.2.0. This fork is the maintained line; `main` carries the work and tracks `origin/main`. It is not on the VS Code Marketplace — releases ship as a VSIX from this repo's GitHub Releases. The `upstream` remote (davidcforbes) is kept only so a revival would be noticeable; never merge or pull it into `main`.
+- **Visual testing:** Run `npm run test:visual-server` to launch the standalone visual test server with mock data in Chrome. Use Chrome DevTools MCP to automate visual validation. Note: Chrome DevTools MCP does NOT work with VS Code's Electron webviews (Puppeteer's `Target.getDevToolsTarget` is unsupported in Electron). The standalone server renders the same webview code in regular Chrome where MCP works. Add `--dataset=showcase` to swap the two deliberately hostile fixture titles (a 200-character overflow case and an XSS probe) for ordinary ones when capturing screenshots.
 - **Test data seeding:** Run `bash scripts/seed-test-data.sh` to populate a .beads database with 53 representative issues for testing. Clean with `bash scripts/clean-test-data.sh`.
+
+## Issue tracking
+
+This project uses **bd (beads)** for its own backlog, dogfooding the extension. Issue prefix `bbk-`, embedded Dolt backend, database under `.beads/` (gitignored).
+
+- `bd ready` — available work, respecting blockers
+- `bd show <id>` / `bd create` / `bd close <id> --reason "..."`
+- `bd dolt push` / `bd dolt pull` — cross-machine sync
+
+`.beads/` being gitignored does **not** pin the backlog to one machine. The Dolt working files are what stays untracked; the issue *data* syncs to `refs/dolt/data` on the same GitHub remote — a ref namespace that never appears in the working tree. On a second machine: clone, then `bd dolt pull`.
+
+**`routing.mode` must stay `maintainer`** in `.beads/config.yaml`. This machine has a global `routing.contributor = ~/.beads-planning` with `routing.mode = auto`, which silently routes `bd create` writes into that separate planning database (prefix `bktest-`) instead of this repo's. The symptom is issues coming back with the wrong prefix and `bd list` showing unrelated seed fixtures.
