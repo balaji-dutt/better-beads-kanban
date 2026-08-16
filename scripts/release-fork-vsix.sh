@@ -7,11 +7,11 @@
 # tag + asset name + SHA256. This script produces all three and prints them in
 # the shape those pinned scripts expect.
 #
-# The build half mirrors scripts/build-local-vsix.sh: the VSIX filename
-# and the in-VS-Code displayName both carry the branch and short SHA, so an
-# installed build can be identified without guessing. The difference is that
-# this script refuses to run on a dirty tree — iteration builds belong in the
-# .local script, releases do not.
+# The VSIX filename carries the branch and short SHA so a downloaded asset can
+# be identified without guessing, but package.json is packaged exactly as
+# committed. That is the difference from scripts/build-local-vsix.sh, which also
+# patches displayName: an iteration build has no version to identify it, a
+# release does. This script also refuses to run on a dirty tree.
 #
 # Usage: scripts/release-fork-vsix.sh [--dry-run]
 #
@@ -54,21 +54,21 @@ ORIG_NAME=$(node -p "require('./package.json').displayName")
 PACKAGE_NAME=$(node -p "require('./package.json').name")
 VERSION=$(node -p "require('./package.json').version")
 
-# The marketplace rejects pre-release tags, so a plain X.Y.Z here almost always
-# means the fork suffix was forgotten and the build would collide with upstream.
-case "$VERSION" in
-  *-bd.*) ;;
-  *)
-    echo "ERROR: version '${VERSION}' has no -bd.N suffix." >&2
-    echo "  Fork builds must be versioned X.Y.Z-bd.N to stay distinguishable" >&2
-    echo "  from upstream. Run: node scripts/bump-version.js X.Y.Z-bd.N" >&2
-    exit 1
-    ;;
-esac
+# This used to require an X.Y.Z-bd.N suffix so a fork build could not be mistaken
+# for upstream's. That rationale is gone: the extension IDs differ
+# (balaji-dutt.better-beads-kanban vs davidcforbes.beads-kanban), this fork is not
+# on the marketplace, and since 2.2.0 it is the maintained line rather than a
+# patch series on top of one. Plain X.Y.Z is now the normal case; -bd.N stays
+# accepted so the older tags remain reproducible. Anything else is still a typo.
+# Same shape as SEMVER_RE in scripts/bump-version.js — keep the two in sync.
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-bd\.[0-9]+)?$ ]]; then
+  echo "ERROR: version '${VERSION}' is not X.Y.Z or X.Y.Z-bd.N." >&2
+  echo "  Run: node scripts/bump-version.js X.Y.Z" >&2
+  exit 1
+fi
 
-TAG="bd-fixes-v${VERSION}-${SHA}"
+TAG="v${VERSION}-${SHA}"
 TARGET_VSIX="${PACKAGE_NAME}-${VERSION}-${BRANCH}-${SHA}.vsix"
-TAGGED_NAME="${ORIG_NAME} [${BRANCH}+${SHA}]"
 RELEASE_TITLE="${ORIG_NAME} ${VERSION} ${SHA}"
 
 if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
@@ -108,16 +108,12 @@ npm run verify
 
 # --- Build -------------------------------------------------------------------
 
-# Restore package.json on any exit so the temporary displayName patch never
-# leaks into a commit.
-trap 'git checkout -- package.json 2>/dev/null || true' EXIT
-
-node -e "
-  const fs = require('fs');
-  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-  pkg.displayName = '${TAGGED_NAME//\'/\\\'}';
-  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
+# A release build packages package.json exactly as committed. Earlier versions
+# patched displayName to "<name> [<branch>+<sha>]" here and restored it via an
+# EXIT trap, so an installed build could be traced back to a commit. That is now
+# the version number's job: releases carry a real X.Y.Z and a matching tag, and
+# the branch is always main. build-local-vsix.sh still tags its displayName —
+# that is the point of an iteration build, which has no version to identify it.
 
 # SHA256SUMS is written after packaging, so one left behind by an earlier run
 # or by --dry-run would be picked up as extension content.
@@ -125,8 +121,6 @@ rm -f SHA256SUMS
 
 echo "==> Packaging ${TARGET_VSIX}"
 npx @vscode/vsce package --out "${TARGET_VSIX}"
-
-git checkout -- package.json
 
 sha256_file "${TARGET_VSIX}" > SHA256SUMS
 EXPECTED_SHA=$(cut -d ' ' -f 1 < SHA256SUMS)
