@@ -5,6 +5,26 @@ All notable changes to the Beads Kanban extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4-bd.4] - 2026-08-16
+
+Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
+
+### 🐛 Bug Fixes
+
+- **A missing `bd` executable no longer reports itself as a missing database.** Node emits `spawn bd ENOENT` when `bd` is not on PATH, and the error mapper matched any `ENOENT` first, so a PATH problem came out as "Database file not found — check that the .beads directory exists" and sent debugging into the folder picker. The message that should have appeared was already written but unreachable: it matched `bd: command not found`, a shell phrasing Node never produces, and sat 33 lines below the branch that always won. Spawn failures are now classified first, and against the raw error rather than the path-scrubbed one — an absolute `beadsKanban.bdPath` is rewritten to `[PATH]` before the mapper sees it, so matching on the binary name could not have worked. A spawn `EACCES`/`EPERM` gets its own message too, instead of claiming the database is unreadable.
+- **The board finds `.beads` anywhere in the workspace.** It used `workspaceFolders[0]` unconditionally, with no discovery of any kind, so a multi-root workspace worked only when the folder holding `.beads` happened to be listed first, and opening a subfolder of the repository did not work at all. Resolution now prefers the folder chosen through the repository picker, then checks every workspace root in order, then walks upward from each root, and only then falls back to the first root. When several roots qualify the first is used and the rest are named in the output channel.
+- **Auto-refresh works for Dolt-backed repositories.** The file watcher globbed `.beads/**/*.{db,sqlite,sqlite3}`. bd 1.x replaced SQLite with Dolt, so such a repository contains no file matching any of those extensions and the watcher had never once fired for one. It now watches the bd-level write signals at the top of `.beads` and the Dolt journal under `<database>/.dolt/noms/`, filtering out the server log, lock and pid files that change constantly on their own. Both patterns are needed: on Windows `bd` runs as a client against a Dolt server hosted elsewhere, and there is no local `dolt/` directory to watch.
+- **The repository picker's choice survives a window reload.** The chosen path was written to workspace state under a key nothing ever read, so the comment claiming it was stored "for future sessions" was false and the board reverted to the first workspace folder on every reopen. The value is now read back and given precedence over discovery, and is cleared automatically if that folder loses its `.beads` directory. Switching repositories also rebinds the file watchers, which previously stayed pointed at the old one.
+
+### 🧹 Cleanup
+
+- **Removed the `beadsKanban.doltPath` setting.** It was contributed in `package.json` and read by nothing. The extension has not touched Dolt directly since `better-sqlite3` was dropped — it shells out to `bd`. `beadsKanban.bdPath` is unaffected and still works.
+
+### 🔧 Internal
+
+- **Release tags now point at the code that was built.** `scripts/release-fork-vsix.sh` called `gh release create` without `--target`, so GitHub created the tag on the default branch. Every release so far — bd.1, bd.2 and bd.3 — carries a tag resolving to upstream's `main` rather than to the fork commit the VSIX was packaged from. The published assets were never affected, since they are pinned by sha256.
+- **`sanitizeError` has tests.** It had none, and `security.test.ts` carried a comment claiming the functions were not exported, which had never been true. New suites cover the error mapper, the workspace resolver and the watch filter, taking the suite from 387 to 446 passing. The resolver and watch rules live in `src/beadsWorkspace.ts` and `src/beadsWatch.ts` with no `vscode` import, so they are testable without an Extension Development Host.
+
 ## [2.1.4-bd.3] - 2026-08-09
 
 Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
