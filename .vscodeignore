@@ -25,6 +25,12 @@ node_modules/**
 *.log
 .beads/**
 
+# Release artifacts. release-fork-vsix.sh writes SHA256SUMS after packaging,
+# so a leftover from a previous run (or from --dry-run) would otherwise be
+# bundled into the next VSIX.
+SHA256SUMS
+*.vsix
+
 # Local-only working directory (untracked via .git/info/exclude — exclude
 # from VSIX too so scratch files don't bloat the package)
 .local/**

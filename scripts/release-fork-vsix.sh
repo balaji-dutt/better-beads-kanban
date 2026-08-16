@@ -119,6 +119,10 @@ node -e "
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 
+# SHA256SUMS is written after packaging, so one left behind by an earlier run
+# or by --dry-run would be picked up as extension content.
+rm -f SHA256SUMS
+
 echo "==> Packaging ${TARGET_VSIX}"
 npx @vscode/vsce package --out "${TARGET_VSIX}"
 
