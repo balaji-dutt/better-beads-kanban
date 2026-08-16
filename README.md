@@ -42,6 +42,8 @@ Sort, filter, and customize columns for detailed issue management.
 
 Browse the parent/child hierarchy like `bd list`, with expandable nodes and connector guides.
 
+![Tree View](images/screenshots/tree-view.jpg)
+
 ### Dependency Graph View
 
 Visualize issue relationships and dependencies with an interactive graph.
