@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a VS Code extension that provides a Kanban board interface for issues stored in a `.beads` SQLite database. The extension uses the `bd` CLI daemon for all database operations, providing efficient incremental loading and real-time updates. The board uses column-based loading to keep large databases (10,000+ issues) responsive.
+This is a VS Code extension that provides a Kanban board interface for issues stored in a `.beads` directory. bd 1.x keeps those issues in Dolt (or JSONL), not SQLite, and the extension never opens the database itself — it shells out to the `bd` CLI daemon for every operation, providing efficient incremental loading and real-time updates. The board uses column-based loading to keep large databases (10,000+ issues) responsive.
 
 ## Development Commands
 
