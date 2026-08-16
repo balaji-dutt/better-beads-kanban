@@ -5,6 +5,14 @@ All notable changes to the Beads Kanban extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4-bd.5] - 2026-08-16
+
+Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace. Repackaging of 2.1.4-bd.4; no behaviour changes.
+
+### 🔧 Internal
+
+- **`SHA256SUMS` no longer ends up inside the VSIX.** The release script writes it after `vsce` has packaged, so a copy left by an earlier release — or by `--dry-run`, which packages and checksums before it skips the upload — was picked up as extension content by the following run. 2.1.4-bd.4 shipped with a stale one at `extension/SHA256SUMS`, 40 files instead of 39. Inert, but it meant the release could not be reproduced from a clean checkout of its own tag. The script now clears it before packaging, and `.vscodeignore` excludes both it and `*.vsix`.
+
 ## [2.1.4-bd.4] - 2026-08-16
 
 Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace.
