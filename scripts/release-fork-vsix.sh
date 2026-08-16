@@ -67,9 +67,17 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-bd\.[0-9]+)?$ ]]; then
   exit 1
 fi
 
-TAG="v${VERSION}-${SHA}"
-TARGET_VSIX="${PACKAGE_NAME}-${VERSION}-${BRANCH}-${SHA}.vsix"
-RELEASE_TITLE="${ORIG_NAME} ${VERSION} ${SHA}"
+# Tag and asset are derivable from the version alone, deliberately. The dotfiles
+# repo pins this release by tag + asset name + sha256 and wants Renovate to
+# maintain that pin; a regex manager can build "v2.2.0" and
+# "better-beads-kanban-2.2.0.vsix" from a version string, but could never have
+# reconstructed the previous "-${BRANCH}-${SHA}" forms. Traceability is not lost:
+# the release is created with --target ${FULL_SHA}, and the body names the
+# commit. Uniqueness comes from the version — bump-version.js refuses to reuse
+# one, and the guards below refuse an existing tag or release.
+TAG="v${VERSION}"
+TARGET_VSIX="${PACKAGE_NAME}-${VERSION}.vsix"
+RELEASE_TITLE="${ORIG_NAME} ${VERSION}"
 
 if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
   echo "ERROR: tag ${TAG} already exists locally." >&2
