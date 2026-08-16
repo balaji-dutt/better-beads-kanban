@@ -5,6 +5,31 @@ All notable changes to the Beads Kanban extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-08-16
+
+This fork becomes the maintained line. `main` now carries the fork's work rather than tracking `davidcforbes/Beads-Kanban`, which has been dormant since April 2026. Nothing about how the extension behaves changes in this release — it is an identity, documentation and versioning release. The functional work it collects shipped across 2.1.4-bd.1 through 2.1.4-bd.5; see those entries.
+
+The version is 2.2.0 rather than 2.1.5 because the accumulated fork-only work — tree view, filter state machine, relationship affordances, UI state persistence, bd 1.x / Dolt support — is a feature line, and it drops the `-bd.N` suffix because there is no longer an upstream release series to stay distinguishable from.
+
+### 💥 Breaking
+
+- **The extension ID changed from `balaji-dutt.beads-kanban-bd-fixes` to `balaji-dutt.better-beads-kanban`.** VS Code treats this as a different extension, so upgrading is not automatic. Uninstall the old one — `code --uninstall-extension balaji-dutt.beads-kanban-bd-fixes` — or both will be installed at once and both will register the "Beads: Open Kanban Board" command.
+
+### ✨ Changed
+
+- **Renamed to Better Beads Kanban.** "BD Fixes" described a branch, which stopped being accurate once this became the maintained line rather than a patch series stacked on upstream.
+- **Removed the last of the grandparent project's branding.** The HTML `<title>`, the board header, and the Settings UI section header all still read "Agent Native Abstraction Layer for Beads" — the name of the project two forks back. `author` and `sponsor` still pointed at davidcforbes.
+
+### 📚 Documentation
+
+- **README rewritten.** It was upstream's, verbatim, and wrong in ways that mattered: it advertised a Marketplace install (which fetches upstream's 2.1.2, without any of the bd fixes), pointed downloads and clone URLs at davidcforbes, described issues as living in `.beads/*.db` SQLite files, documented a `beadsKanban.doltPath` setting removed in 2.1.4-bd.4, referenced a deleted source file, and narrated the wrong pair of repositories in its attribution. It now leads with what this fork is, explains what it changes and why, and carries the full three-way lineage.
+- Corrected two stale claims in `CLAUDE.md`: the same removed `doltPath` setting, and a `src/daemonManager.ts` listed as a core component. That file does not exist and the extension contributes no status bar item.
+
+### 🔧 Internal
+
+- **`scripts/release-fork-vsix.sh` accepts plain `X.Y.Z` versions.** It hard-refused anything without a `-bd.N` suffix, to keep fork builds from colliding with upstream on the Marketplace. The extension IDs differ, this fork was never published there, and it is no longer a patch series — so the guard blocked nothing but 2.2.0. It now shares the version shape with `scripts/bump-version.js` and takes both forms. Release tags drop the `bd-fixes-v` prefix for `v`.
+- **Release builds no longer patch `displayName`.** The script rewrote `package.json` to `"<name> [<branch>+<sha>]"` before packaging and restored it from an `EXIT` trap, so an installed build could be traced to a commit. A real version and a matching tag do that now. `scripts/build-local-vsix.sh` keeps its own tagging — an iteration build has no version to identify it.
+
 ## [2.1.4-bd.5] - 2026-08-16
 
 Fork-only build (`balaji-dutt/Beads-Kanban`), distributed as a GitHub release VSIX rather than through the marketplace. Repackaging of 2.1.4-bd.4; no behaviour changes.
