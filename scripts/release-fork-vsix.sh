@@ -47,6 +47,9 @@ fi
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
 SHA=$(git rev-parse --short HEAD)
+# Full SHA for gh's --target: the API accepts a branch name or a full commit
+# SHA, and does not reliably resolve an abbreviated one.
+FULL_SHA=$(git rev-parse HEAD)
 ORIG_NAME=$(node -p "require('./package.json').displayName")
 PACKAGE_NAME=$(node -p "require('./package.json').name")
 VERSION=$(node -p "require('./package.json').version")
@@ -132,8 +135,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "    Would create tag ${TAG} on ${FORK_REPO}."
 else
   echo "==> Creating release ${TAG} on ${FORK_REPO}"
+  # Without --target, GitHub creates the tag on the repository's default branch
+  # rather than on the commit that was built, so checking out the tag yields the
+  # wrong tree. Releases bd.1 through bd.3 all carry this defect.
   gh release create "${TAG}" \
     --repo "${FORK_REPO}" \
+    --target "${FULL_SHA}" \
     --title "${RELEASE_TITLE}" \
     --notes "Fork build of ${PACKAGE_NAME} ${VERSION} from ${BRANCH} at ${SHA}. See CHANGELOG.md for what changed." \
     "${TARGET_VSIX}" SHA256SUMS
