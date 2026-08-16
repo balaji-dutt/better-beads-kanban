@@ -70,3 +70,8 @@ media/purify.min.js
 /*Edit Form*.jpg
 /*Table*.jpg
 /*Kanban*.jpg
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
