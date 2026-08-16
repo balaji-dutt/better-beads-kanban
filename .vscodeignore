@@ -35,6 +35,12 @@ SHA256SUMS
 # from VSIX too so scratch files don't bloat the package)
 .local/**
 
+# Agent tooling config. vsce reads .vscodeignore, not .gitignore, so a file
+# being git-ignored does not keep it out of the VSIX — settings.local.json
+# shipped in every build up to 2.1.4-bd.5, carrying absolute local paths.
+.claude/**
+.plannotator/**
+
 # Git worktrees created by orchestrator workflows live at
 # worktrees/<branch>-<hash>/ alongside the main clone. Excluded from the
 # VSIX so the package stays at the ~1.1 MB baseline instead of bundling
