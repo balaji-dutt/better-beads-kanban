@@ -7,7 +7,7 @@
 # tag + asset name + SHA256. This script produces all three and prints them in
 # the shape those pinned scripts expect.
 #
-# The build half mirrors .local/scripts/build-local-vsix.sh: the VSIX filename
+# The build half mirrors scripts/build-local-vsix.sh: the VSIX filename
 # and the in-VS-Code displayName both carry the branch and short SHA, so an
 # installed build can be identified without guessing. The difference is that
 # this script refuses to run on a dirty tree — iteration builds belong in the
@@ -36,7 +36,7 @@ FORK_REPO="balaji-dutt/Beads-Kanban"
 if [ -n "$(git status --porcelain)" ]; then
   echo "ERROR: working tree is dirty." >&2
   echo "  A release must be reproducible from the tagged commit." >&2
-  echo "  Commit or stash, or use .local/scripts/build-local-vsix.sh to iterate." >&2
+  echo "  Commit or stash, or use scripts/build-local-vsix.sh to iterate." >&2
   exit 1
 fi
 
