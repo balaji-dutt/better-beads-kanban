@@ -1,8 +1,18 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { DaemonBeadsAdapter } from "./daemonBeadsAdapter";
 import { getWebviewHtml } from "./webview";
 import { sanitizeErrorWithContext as sanitizeError } from "./sanitizeError";
 import { validateMarkdownFields, validateCommentContent } from "./markdownValidator";
+import {
+  BEADS_DIR,
+  REPO_PATH_STATE_KEY,
+  BeadsResolution,
+  resolveBeadsRoot,
+  describeResolution
+} from "./beadsWorkspace";
+import { BEADS_WATCH_PATTERNS, shouldTriggerRefresh } from "./beadsWatch";
 import {
   BoardData,
   BoardCard,
@@ -142,18 +152,51 @@ export function activate(context: vscode.ExtensionContext) {
 
   let adapter: DaemonBeadsAdapter | null = null;
   let adapterWorkspaceRoot: string | null = null;
+  let lastDescribedResolution: string | null = null;
+
+  const hasBeadsDir = (repoRoot: string): boolean => {
+    try {
+      return fs.statSync(path.join(repoRoot, BEADS_DIR)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+
+  const resolveRoot = (): BeadsResolution => {
+    const persisted = context.workspaceState.get<string>(REPO_PATH_STATE_KEY);
+    const resolution = resolveBeadsRoot({
+      roots: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+      persisted,
+      hasBeadsDir
+    });
+
+    // A picked repository that has since moved or been deleted would otherwise
+    // keep losing the race against discovery on every future session.
+    if (persisted && resolution.kind !== 'persisted') {
+      output.appendLine(`[Extension] Selected repository no longer has a ${BEADS_DIR} directory; clearing it.`);
+      void context.workspaceState.update(REPO_PATH_STATE_KEY, undefined);
+    }
+
+    const described = describeResolution(resolution);
+    if (described !== lastDescribedResolution) {
+      output.appendLine(`[Extension] ${described}`);
+      lastDescribedResolution = described;
+    }
+
+    return resolution;
+  };
 
   const ensureAdapter = (): DaemonBeadsAdapter | null => {
-    const ws = vscode.workspace.workspaceFolders?.[0];
-    if (!ws) {
+    const resolution = resolveRoot();
+    if (!resolution.root) {
       return null;
     }
 
-    if (!adapter || adapterWorkspaceRoot !== ws.uri.fsPath) {
+    if (!adapter || adapterWorkspaceRoot !== resolution.root) {
       adapter?.dispose();
       output.appendLine('[Extension] Using DaemonBeadsAdapter');
-      adapter = new DaemonBeadsAdapter(ws.uri.fsPath, output);
-      adapterWorkspaceRoot = ws.uri.fsPath;
+      adapter = new DaemonBeadsAdapter(resolution.root, output);
+      adapterWorkspaceRoot = resolution.root;
     }
 
     return adapter;
@@ -161,13 +204,56 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push({ dispose: () => adapter?.dispose() });
 
-  if (vscode.workspace.workspaceFolders?.[0]) {
-    ensureAdapter();
-  }
+  // Set by an open board so a repository switch can rebind its file watchers,
+  // which would otherwise stay pointed at the previous repository.
+  let rebindWatchers: ((root: string) => void) | null = null;
+
+  /**
+   * Prompt for a folder containing `.beads`, persist it, and retarget the
+   * adapter. Returns the chosen path, or null if the user cancelled or picked
+   * a folder without a `.beads` directory.
+   */
+  const selectBeadsRepository = async (): Promise<string | null> => {
+    const selectedFolder = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Select Beads Repository Folder",
+      title: `Select a folder containing a ${BEADS_DIR} directory`
+    });
+
+    if (!selectedFolder || !selectedFolder[0]) {
+      return null;
+    }
+
+    const folderPath = selectedFolder[0].fsPath;
+    if (!hasBeadsDir(folderPath)) {
+      vscode.window.showErrorMessage(`Selected folder does not contain a ${BEADS_DIR} directory.`);
+      return null;
+    }
+
+    // Persisted so the choice survives a window reload; resolveBeadsRoot gives
+    // it precedence over discovery.
+    await context.workspaceState.update(REPO_PATH_STATE_KEY, folderPath);
+    lastDescribedResolution = null;
+
+    // Retarget the existing adapter in place rather than going through
+    // ensureAdapter(): recreating it here would leave an open board holding a
+    // disposed instance. If no adapter exists yet, the next ensureAdapter()
+    // call builds one at the newly persisted root.
+    adapter?.setWorkspaceRoot(folderPath);
+    adapterWorkspaceRoot = folderPath;
+    rebindWatchers?.(folderPath);
+
+    vscode.window.showInformationMessage(`Switched to repository: ${folderPath}`);
+    return folderPath;
+  };
+
+  ensureAdapter();
 
   const openCmd = vscode.commands.registerCommand("beadsKanban.openBoard", async () => {
-    const ws = vscode.workspace.workspaceFolders?.[0];
-    if (!ws) {
+    const resolution = resolveRoot();
+    if (!resolution.root) {
       vscode.window.showErrorMessage('Beads Kanban requires an open workspace folder.');
       return;
     }
@@ -176,6 +262,23 @@ export function activate(context: vscode.ExtensionContext) {
     if (!adapter) {
       vscode.window.showErrorMessage('Beads Kanban requires an open workspace folder.');
       return;
+    }
+
+    // Surface an ambiguous or failed lookup without blocking activation.
+    if (resolution.kind === 'none') {
+      void vscode.window.showWarningMessage(
+        `No ${BEADS_DIR} directory was found in this workspace. Using ${resolution.root}.`,
+        'Select Repository Folder…'
+      ).then((choice) => {
+        if (choice) { void selectBeadsRepository(); }
+      });
+    } else if (resolution.kind === 'direct' && resolution.candidates.length > 1) {
+      void vscode.window.showInformationMessage(
+        `Several workspace roots contain a ${BEADS_DIR} directory. Using ${resolution.root}.`,
+        'Select Repository Folder…'
+      ).then((choice) => {
+        if (choice) { void selectBeadsRepository(); }
+      });
     }
 
     try {
@@ -671,56 +774,24 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       if (msg.type === "repo.select") {
-        // Open folder picker to select a different beads repository
-        const selectedFolder = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: false,
-          openLabel: "Select Beads Repository Folder",
-          title: "Select a folder containing a .beads directory"
-        });
+        // The picker itself persists the choice, retargets the adapter and
+        // rebinds the watchers; only the board reload is panel-specific.
+        const folderPath = await selectBeadsRepository();
 
-        if (selectedFolder && selectedFolder[0]) {
-          const folderPath = selectedFolder[0].fsPath;
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const beadsPath = path.join(folderPath, '.beads');
-
-          try {
-            const stat = await fs.stat(beadsPath);
-            if (!stat.isDirectory()) {
-              vscode.window.showErrorMessage(`Selected folder does not contain a .beads directory.`);
-              post({ type: "mutation.error", requestId: msg.requestId, error: "No .beads directory found" });
-              return;
-            }
-
-            // Store the selected path in workspace state for future sessions
-            await context.workspaceState.update('beadsRepoPath', folderPath);
-
-            // Update the adapter to use the new repository path
-            adapter.setWorkspaceRoot(folderPath);
-
-            // Show info message
-            vscode.window.showInformationMessage(`Switched to repository: ${folderPath}`);
-
-            // Auto-reload the board data with the new repository
-            try {
-              const data = await adapter.getBoard();
-              data.readOnly = readOnly; // Propagate read-only mode to webview UI
-              const persistedUIState = readPersistedUIState();
-              if (persistedUIState) { data.uiState = persistedUIState; }
-              post({ type: "board.data", requestId: msg.requestId, payload: data });
-            } catch (err) {
-              output.appendLine(`[Extension] Error loading board after repo switch: ${err}`);
-              post({ type: "mutation.error", requestId: msg.requestId, error: "Failed to load new repository" });
-            }
-          } catch {
-            vscode.window.showErrorMessage(`Selected folder does not contain a .beads directory.`);
-            post({ type: "mutation.error", requestId: msg.requestId, error: "No .beads directory found" });
-          }
-        } else {
-          // User cancelled
+        if (!folderPath) {
           post({ type: "mutation.ok", requestId: msg.requestId });
+          return;
+        }
+
+        try {
+          const data = await adapter.getBoard();
+          data.readOnly = readOnly; // Propagate read-only mode to webview UI
+          const persistedUIState = readPersistedUIState();
+          if (persistedUIState) { data.uiState = persistedUIState; }
+          post({ type: "board.data", requestId: msg.requestId, payload: data });
+        } catch (err) {
+          output.appendLine(`[Extension] Error loading board after repo switch: ${sanitizeError(err)}`);
+          post({ type: "mutation.error", requestId: msg.requestId, error: "Failed to load new repository" });
         }
         return;
       }
@@ -948,17 +1019,15 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    // Auto refresh when DB files change
-    const ws = vscode.workspace.workspaceFolders?.[0];
-    if (ws) {
-      const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(ws, ".beads/**/*.{db,sqlite,sqlite3}")
-      );
+    // Auto refresh when the Beads database changes
+    const watchedRoot = resolution.root;
+    if (watchedRoot) {
+      let watchers: vscode.FileSystemWatcher[] = [];
       let refreshTimeout: NodeJS.Timeout | null = null;
       let changeCount = 0; // Track changes during debounce window
       const refresh = (uri?: vscode.Uri) => {
-        // Ignore WAL/SHM/Journal files which change frequently during reads
-        if (uri && (uri.fsPath.endsWith('-wal') || uri.fsPath.endsWith('-shm') || uri.fsPath.endsWith('-journal'))) {
+        // Ignore locks, logs and journals, which churn without any issue changing
+        if (uri && !shouldTriggerRefresh(uri.fsPath)) {
           return;
         }
 
@@ -1026,9 +1095,28 @@ export function activate(context: vscode.ExtensionContext) {
           refreshTimeout = null;
         }, 300);
       };
-      watcher.onDidChange(refresh);
-      watcher.onDidCreate(refresh);
-      watcher.onDidDelete(refresh);
+      // A Uri base rather than a WorkspaceFolder: with a persisted picker choice
+      // or an ancestor match the root can be outside every workspace folder,
+      // which a WorkspaceFolder-relative pattern cannot express.
+      const attachWatchers = (root: string) => {
+        for (const existing of watchers) {
+          existing.dispose();
+        }
+        watchers = BEADS_WATCH_PATTERNS.map((pattern) => {
+          const created = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(vscode.Uri.file(root), pattern)
+          );
+          created.onDidChange(refresh);
+          created.onDidCreate(refresh);
+          created.onDidDelete(refresh);
+          return created;
+        });
+        output.appendLine(`[Extension] Watching ${BEADS_WATCH_PATTERNS.length} patterns under ${root}`);
+      };
+
+      attachWatchers(watchedRoot);
+      rebindWatchers = attachWatchers;
+
       panel.onDidDispose(() => {
         output.appendLine('[Extension] Panel disposed');
         isDisposed = true;
@@ -1049,7 +1137,15 @@ export function activate(context: vscode.ExtensionContext) {
         if (refreshTimeout) {
           clearTimeout(refreshTimeout);
         }
-        watcher.dispose();
+        // Only clear the slot if it is still ours; a second board opened later
+        // will have replaced it and is still using it.
+        if (rebindWatchers === attachWatchers) {
+          rebindWatchers = null;
+        }
+        for (const existing of watchers) {
+          existing.dispose();
+        }
+        watchers = [];
       });
     }
 
