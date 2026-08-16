@@ -16,6 +16,9 @@
  *   --no-chrome         Don't auto-launch Chrome (just start the HTTP server)
  *   --theme=dark|light  VS Code color theme to simulate (default: dark)
  *   --rebuild           Force rebuild webview bundle before serving
+ *   --dataset=test|showcase
+ *                       test (default) keeps the adversarial title fixtures;
+ *                       showcase replaces them for screenshots
  *
  * How it works:
  *   1. Optionally rebuilds the webview bundle (npm run build-webview)
@@ -67,6 +70,7 @@ const DEBUG_PORT = parseInt(getArg('debug-port', '9222'), 10);
 const NO_CHROME = hasFlag('no-chrome');
 const THEME = getArg('theme', 'dark');
 const REBUILD = hasFlag('rebuild');
+const DATASET = getArg('dataset', 'test');
 
 // ---------------------------------------------------------------------------
 // Mock Board Data
@@ -707,6 +711,41 @@ function generateMockBoardData() {
   ];
 }
 
+/**
+ * Two cards in the default dataset carry deliberately hostile titles — a
+ * 200-character overflow case and an XSS probe. They earn their place: the
+ * webview needs both exercised. They are useless in a README screenshot, so
+ * --dataset=showcase swaps those two titles for ordinary ones and leaves
+ * everything else — statuses, hierarchy, labels, assignees — alone. One
+ * dataset, one structure, no second copy to keep in sync.
+ *
+ * Titles are duplicated into `children[]` and `parent` references, so those
+ * are rewritten too or the tree and detail panes would disagree with the card.
+ */
+var SHOWCASE_TITLE_OVERRIDES = {
+  'mock-000002': 'Rate-limit the public search endpoint',
+  'mock-000003': 'Session cookie survives sign-out on Firefox'
+};
+
+function applyShowcaseTitles(cards) {
+  function retitle(ref) {
+    if (ref && Object.prototype.hasOwnProperty.call(SHOWCASE_TITLE_OVERRIDES, ref.id)) {
+      ref.title = SHOWCASE_TITLE_OVERRIDES[ref.id];
+    }
+  }
+  cards.forEach(function(card) {
+    retitle(card);
+    if (Array.isArray(card.children)) { card.children.forEach(retitle); }
+    retitle(card.parent);
+  });
+  return cards;
+}
+
+function getBoardData() {
+  var cards = generateMockBoardData();
+  return DATASET === 'showcase' ? applyShowcaseTitles(cards) : cards;
+}
+
 // ---------------------------------------------------------------------------
 // VS Code Theme CSS Variables
 // ---------------------------------------------------------------------------
@@ -818,7 +857,7 @@ function getThemeCss(theme) {
  */
 function generateHtml() {
   // Escape </ sequences in JSON to prevent premature script tag closure (XSS test card has <script> in title)
-  var mockCards = JSON.stringify(generateMockBoardData()).replace(/<\//g, '<\\/');
+  var mockCards = JSON.stringify(getBoardData()).replace(/<\//g, '<\\/');
   var themeCss = getThemeCss(THEME);
   var modKey = 'Ctrl';
 
@@ -854,7 +893,7 @@ function generateHtml() {
 '<body>\n' +
 '  <header class="topbar">\n' +
 '    <div class="title">\n' +
-'      <span class="title-text">Agent Native Abstraction Layer for Beads</span>\n' +
+'      <span class="title-text">Better Beads Kanban</span>\n' +
 '      <button id="repoMenuBtn" class="repo-menu-btn" title="Select Repository">&#x22EF;</button>\n' +
 '    </div>\n' +
 '    <div class="actions">\n' +
@@ -1208,10 +1247,14 @@ function generateHtml() {
 '                  defer_until: null,\n' +
 '                  is_template: false,\n' +
 '                  ephemeral: false,\n' +
-'                  parent: null,\n' +
-'                  children: [],\n' +
-'                  blocks: [],\n' +
-'                  blocked_by: [],\n' +
+'                  // Keep the card own relationships. These used to be hardcoded\n' +
+'                  // empty, which silently made the Graph view untestable here:\n' +
+'                  // renderGraph() builds every edge from this response, so it\n' +
+'                  // always drew zero regardless of the fixture hierarchy.\n' +
+'                  parent: card.parent || null,\n' +
+'                  children: card.children || [],\n' +
+'                  blocks: card.blocks || [],\n' +
+'                  blocked_by: card.blocked_by || [],\n' +
 '                  comments: [\n' +
 '                    { id: 1, author: "alice", text: "This looks good. Ready for review.", created_at: new Date().toISOString() },\n' +
 '                    { id: 2, author: "bob", text: "Agreed, merging.", created_at: new Date().toISOString() }\n' +
