@@ -10,8 +10,9 @@ import {
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
-// Import sanitizeError functions for testing (they're not exported, so we'll test through public APIs)
-// We can access private methods via type casting for testing purposes
+// sanitizeError and sanitizeErrorWithContext are exported and covered directly
+// in sanitizeError.test.ts. This suite covers the adapter's private helpers,
+// which are reached via type casting.
 
 suite('Security Tests', () => {
     suite('sanitizeCliArg() - Command Injection Prevention', () => {

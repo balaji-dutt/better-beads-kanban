@@ -26,15 +26,53 @@ export function sanitizeError(error: unknown): string {
   return sanitized.trim() || 'An error occurred while processing your request.';
 }
 
+// Node reports a failed `spawn` as "spawn <command> ENOENT" (or EACCES/EPERM),
+// never with the shell phrasing "bd: command not found". The command is matched
+// non-greedily rather than as \S+ because a Windows bd path can contain spaces,
+// e.g. "spawn C:\Program Files\bd\bd.exe ENOENT".
+export const SPAWN_ENOENT_RE = /\bspawn\s+.+?\s+ENOENT\b/;
+export const SPAWN_EACCES_RE = /\bspawn\s+.+?\s+(?:EACCES|EPERM)\b/;
+
+/**
+ * True when the error means the bd executable could not be found.
+ *
+ * Match against the RAW message, before sanitizeError() runs: an absolute
+ * `beadsKanban.bdPath` is rewritten to "[PATH]" by the path scrubbers above,
+ * so matching the binary name is not reliable. The legacy shell phrasings are
+ * kept so a message routed in from a shell wrapper still resolves correctly.
+ */
+export function isBdMissingError(raw: string): boolean {
+  return SPAWN_ENOENT_RE.test(raw)
+    || raw.includes('bd command not found')
+    || raw.includes('bd: command not found');
+}
+
+/**
+ * True when the bd executable was found but could not be run.
+ */
+export function isBdNotExecutableError(raw: string): boolean {
+  return SPAWN_EACCES_RE.test(raw);
+}
+
 /**
  * Sanitizes error messages with user-friendly messages for common cases.
  * Use this in the extension where providing helpful context is important.
  * Provides actionable guidance to help users resolve issues.
  */
 export function sanitizeErrorWithContext(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
   const sanitized = sanitizeError(error);
 
   // Provide specific, actionable error messages for common cases
+
+  // Spawn failures must be classified before the generic ENOENT branch below,
+  // which would otherwise report a missing binary as a missing database.
+  if (isBdMissingError(raw)) {
+    return 'Beads CLI (bd) not found. Install beads and add it to your PATH, or set "beadsKanban.bdPath" to the absolute path of the bd executable.';
+  }
+  if (isBdNotExecutableError(raw)) {
+    return 'Beads CLI (bd) was found but could not be run. Check that it is executable, or set "beadsKanban.bdPath" to a working bd executable.';
+  }
 
   // File system errors
   if (sanitized.includes('ENOENT')) {
@@ -69,9 +107,6 @@ export function sanitizeErrorWithContext(error: unknown): string {
   // Daemon-specific errors
   if (sanitized.includes('daemon not running') || sanitized.includes('Daemon not running')) {
     return 'Beads daemon is not running. Click the status bar to start the daemon, or run "bd daemon start" in terminal.';
-  }
-  if (sanitized.includes('bd command not found') || sanitized.includes('bd: command not found')) {
-    return 'Beads CLI (bd) not found in PATH. Install beads, add it to your system PATH, or set "beadsKanban.bdPath" in workspace settings.';
   }
 
   // Validation errors (keep as-is, they're already user-friendly)
