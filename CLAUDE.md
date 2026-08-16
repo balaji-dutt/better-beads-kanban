@@ -132,7 +132,9 @@ Extension Host (TypeScript/Node.js)
 
 - `src/extension.ts` - Entry point; registers commands, creates webview panel, routes messages, enforces read-only mode, and wires file watching
 - `src/daemonBeadsAdapter.ts` - Daemon adapter; uses `bd` CLI to read and mutate issues with efficient caching
-- `src/daemonManager.ts` - Runs `bd` daemon status/actions and populates the status bar
+- `src/beadsWorkspace.ts` - Resolves which workspace folder holds `.beads` (picker choice → root containing `.beads` → upward walk → `roots[0]`). No `vscode` import, so it is unit-testable without an Extension Development Host
+- `src/beadsWatch.ts` - File-watch globs and deny predicate for auto-refresh. Also `vscode`-free
+- `src/sanitizeError.ts` - Maps and scrubs CLI errors before they reach the webview
 - `src/types.ts` - Type definitions and Zod schemas
 - `src/webview.ts` - Generates webview HTML with CSP and asset URIs
 
@@ -759,7 +761,7 @@ To debug, keep source maps in the VSIX by removing `**/*.map` from `.vscodeignor
 ## Important Notes
 
 - The extension requires `bd` CLI on PATH (or configured via `beadsKanban.bdPath` setting) and auto-starts the daemon on load.
-- **Configurable CLI paths:** `beadsKanban.bdPath` and `beadsKanban.doltPath` settings allow users to specify absolute paths to the `bd` and `dolt` executables, supporting portable setups where these tools are not on the system PATH.
+- **Configurable CLI path:** the `beadsKanban.bdPath` setting allows users to specify an absolute path to the `bd` executable, supporting portable setups where it is not on the system PATH. (A `beadsKanban.doltPath` setting existed until 2.1.4-bd.4 and was removed — nothing read it. The extension has not touched Dolt directly since `better-sqlite3` was dropped; it shells out to `bd`.)
 - `npm run compile` copies DOMPurify to the media folder via the `copy-deps` script.
 - Webview scripts are loaded via CSP nonce; HTML uses inline styles extensively.
 - `retainContextWhenHidden: true` keeps webview state when hidden.

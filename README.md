@@ -1,10 +1,28 @@
-# Beads Kanban
+# Better Beads Kanban
 
-A visual Kanban board VS Code extension for managing [Beads](https://github.com/steveyegge/beads) issues directly in your editor. View, create, edit, and organize your `.beads` issues with an intuitive drag-and-drop interface.
+An independent, actively maintained fork of [Beads Kanban](https://github.com/davidcforbes/Beads-Kanban) for VS Code, updated for bd 1.x and Dolt-backed repositories.
 
-![Version](https://img.shields.io/badge/version-2.1.2-blue)
+View, create, edit, and organize the [Beads](https://github.com/steveyegge/beads) issues in your repository from four views — Kanban, table, tree, and dependency graph — without leaving the editor.
+
+![Version](https://img.shields.io/badge/version-2.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![VS Code](https://img.shields.io/badge/VS%20Code-1.90+-blue)
+
+## What this fork changes
+
+Upstream has been dormant since April 2026. This fork continues it, and the differences are not cosmetic — on a bd 1.x repository, several things simply did not work:
+
+**bd 1.x and Dolt support.** bd 1.x replaced SQLite with Dolt. The file watcher globbed `.beads/**/*.{db,sqlite,sqlite3}`, so on a Dolt-backed repository it had never once fired and the board never auto-refreshed. It now watches bd's write signals at the top of `.beads` and the Dolt journal under `<database>/.dolt/noms/`, filtering out the server log, lock, and pid files that churn on their own.
+
+**Workspace discovery.** The board used `workspaceFolders[0]` unconditionally. A multi-root workspace worked only if the folder holding `.beads` happened to be listed first, and opening a subfolder of the repository did not work at all. Resolution now prefers the folder chosen in the repository picker, then checks every workspace root, then walks upward.
+
+**A missing `bd` reported itself as a missing database.** `spawn bd ENOENT` was matched by a generic `ENOENT` branch, so a PATH problem surfaced as "Database file not found" and sent debugging into the folder picker. Spawn failures are classified first now, and the message names `bd`, PATH, and `beadsKanban.bdPath`.
+
+**The repository picker's choice survives a reload.** It was written to workspace state under a key nothing read.
+
+**Tree view**, a filter state machine with inclusive multi-select, relationship affordances, and UI state that persists across panel close/reopen.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ## Screenshots
 
@@ -12,46 +30,55 @@ A visual Kanban board VS Code extension for managing [Beads](https://github.com/
 
 Drag-and-drop cards between columns to manage your workflow.
 
-![Kanban View](https://raw.githubusercontent.com/davidcforbes/beads-kanban/main/images/screenshots/kanban-view.jpg)
+![Kanban View](images/screenshots/kanban-view.jpg)
 
 ### Table View
 
 Sort, filter, and customize columns for detailed issue management.
 
-![Table View](https://raw.githubusercontent.com/davidcforbes/beads-kanban/main/images/screenshots/table-view.jpg)
-
-### Dependency Graph View
-
-Visualize issue relationships and dependencies with an interactive graph.
-
-![Graph View](https://raw.githubusercontent.com/davidcforbes/beads-kanban/main/images/screenshots/graph-view.jpg)
+![Table View](images/screenshots/table-view.jpg)
 
 ### Tree View
 
 Browse the parent/child hierarchy like `bd list`, with expandable nodes and connector guides.
 
+### Dependency Graph View
+
+Visualize issue relationships and dependencies with an interactive graph.
+
+![Graph View](images/screenshots/graph-view.jpg)
+
 ### Edit Issue Form
 
-Comprehensive issue editing with all metadata fields, dependencies, and comments.
+Issue editing with all metadata fields, dependencies, and comments.
 
-![Edit Form](https://raw.githubusercontent.com/davidcforbes/beads-kanban/main/images/screenshots/edit-form.jpg)
+![Edit Form](images/screenshots/edit-form.jpg)
 
 ## Features
 
-✨ **Visual Kanban Board**
+**Visual Kanban Board**
 
 - Drag-and-drop cards between columns (Ready, In Progress, Blocked, Closed)
-- Real-time updates with your `.beads` database
+- Auto-refresh when the underlying database changes
 - Incremental loading for large issue databases (10,000+ issues)
 
-📊 **Table View**
+**Table View**
 
 - Sortable columns with multi-column sorting (Shift+Click)
 - Customizable column visibility
 - Pagination with configurable page sizes
 - Filter by priority, type, status, and search
 
-🔗 **Dependency Graph**
+**Tree View**
+
+- Expandable parent/child hierarchy, mirroring `bd list`'s tree output
+- Connector guide lines show sibling and nesting structure at a glance
+- bd-style rows: colored status glyph, click-to-copy issue id, priority and type, then the title
+- Filters and search show matching issues with their full ancestor chain (non-matching ancestors are dimmed as context)
+- Sibling sort by Updated, Priority, Title, or Created at every level
+- Expansion, sort, and view choice persist across panel close/reopen
+
+**Dependency Graph**
 
 - Interactive visualization of issue relationships
 - Hierarchical layout with parent-child and blocking dependencies
@@ -59,49 +86,44 @@ Comprehensive issue editing with all metadata fields, dependencies, and comments
 - Drag nodes, zoom/pan controls
 - Color-coded by status with visual legend
 
-🌳 **Tree View**
-
-- Expandable parent/child hierarchy, mirroring `bd list`'s tree output
-- Connector guide lines show sibling and nesting structure at a glance
-- bd-style rows: colored status glyph, click-to-copy issue id, priority
-  and type, then the title
-- Filters and search show matching issues with their full ancestor chain
-  (non-matching ancestors are dimmed as context)
-- Sibling sort by Updated, Priority, Title, or Created at every level
-- Expansion, sort, and view choice persist across panel close/reopen
-
-🔧 **Full Issue Management**
+**Full Issue Management**
 
 - Create, edit, and update issues
 - Add comments, labels, and dependencies
 - Markdown support with live preview
 - Rich metadata fields (priority, assignee, estimated time, etc.)
 
-⚡ **Daemon Integration**
+**Daemon Integration**
 
-- Uses `bd` CLI daemon for all database operations
-- Auto-starts daemon when extension loads
+- Uses the `bd` CLI daemon for all database operations
+- Auto-starts the daemon when the extension loads
 - Efficient incremental data loading
 
 ## Installation
 
-### From VSIX (Recommended)
+This fork is **not** published to the VS Code Marketplace. Install the VSIX from this repository's releases:
 
-1. Download the latest `.vsix` file from [Releases](https://github.com/davidcforbes/beads-kanban/releases)
+1. Download the latest `.vsix` from [Releases](https://github.com/balaji-dutt/Beads-Kanban/releases)
 2. In VS Code: `Extensions > ... > Install from VSIX...`
 3. Select the downloaded file
 4. Reload VS Code
 
-### From VS Code Marketplace
+Each release also publishes a `SHA256SUMS` file if you want to verify the download.
 
-1. Open VS Code Extensions view (`Ctrl+Shift+X`)
-2. Search for "Beads Kanban"
-3. Click Install
+> Searching the Marketplace for "Beads Kanban" finds upstream's extension, which does not carry any of the changes above.
+
+### Upgrading from `beads-kanban-bd-fixes`
+
+Releases before 2.2.0 used the extension ID `balaji-dutt.beads-kanban-bd-fixes`. From 2.2.0 it is `balaji-dutt.better-beads-kanban`. VS Code treats that as a different extension, so uninstall the old one first — otherwise both register the "Beads: Open Kanban Board" command:
+
+```bash
+code --uninstall-extension balaji-dutt.beads-kanban-bd-fixes
+```
 
 ## Prerequisites
 
-- **Beads CLI** (`bd`): Required for all database operations. Install from [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
-- The extension auto-starts the `bd` daemon when needed
+- **Beads CLI** (`bd`): required for all database operations. Install from [github.com/steveyegge/beads](https://github.com/steveyegge/beads).
+- The extension auto-starts the `bd` daemon when needed.
 
 ## Quick Start
 
@@ -111,19 +133,19 @@ Comprehensive issue editing with all metadata fields, dependencies, and comments
    bd init
    ```
 
-2. **Open the Kanban board**:
-   - Command Palette (`Ctrl+Shift+P`): "Beads: Open Kanban Board"
-   - Or use the status bar button
+2. **Open the Kanban board**: Command Palette (`Ctrl+Shift+P`) → "Beads: Open Kanban Board"
 
 3. **Start managing issues**:
    - Create issues with the "New" button
    - Drag cards between columns to update status
    - Click cards to view/edit details
-   - Switch to Table view for sorting and filtering
+   - Switch views with the Kanban / Table / Tree / Graph toggle
 
 ## What is Beads?
 
-Beads is an AI-native issue tracking system that lives directly in your codebase. Issues are stored in `.beads/*.db` SQLite files and sync with git, making them perfect for AI coding agents and developers who want issues close to code.
+Beads is an AI-native issue tracking system that lives directly in your codebase, keeping issues close to code and usable by coding agents.
+
+As of bd 1.x, issues are stored in a [Dolt](https://www.dolthub.com/) database under `.beads/` (JSONL is also supported); earlier versions used SQLite. This extension never opens that database itself — every read and write goes through the `bd` CLI, so it stays correct across storage backends.
 
 **Learn more:** [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
 
@@ -131,13 +153,13 @@ Beads is an AI-native issue tracking system that lives directly in your codebase
 
 | Setting | Default | Description |
 | --------- | --------- | ------------- |
-| `beadsKanban.bdPath` | `""` | Absolute path to `bd` CLI. Leave empty to use system PATH. |
-| `beadsKanban.doltPath` | `""` | Absolute path to `dolt`. Leave empty to use system PATH. |
+| `beadsKanban.bdPath` | `""` | Absolute path to the `bd` CLI. Leave empty to use system PATH. |
 | `beadsKanban.readOnly` | `false` | Enable read-only mode (no edits) |
 | `beadsKanban.initialLoadLimit` | `100` | Issues per column on initial load |
 | `beadsKanban.pageSize` | `50` | Issues to load when clicking "Load More" |
 | `beadsKanban.preloadClosedColumn` | `false` | Load closed issues on initial load |
 | `beadsKanban.lazyLoadDependencies` | `true` | Load dependencies on-demand |
+| `beadsKanban.issuePrefix` | `""` | Issue ID prefix. Leave empty to auto-detect. |
 
 ## Development
 
@@ -149,28 +171,21 @@ Beads is an AI-native issue tracking system that lives directly in your codebase
 ### Build from Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/davidcforbes/beads-kanban.git
-cd beads-kanban
+git clone https://github.com/balaji-dutt/Beads-Kanban.git
+cd Beads-Kanban
 
-# Install dependencies
 npm install
-
-# Compile
 npm run compile
-
-# Run tests
 npm test
 
-# Package VSIX
 npx @vscode/vsce package
 ```
 
 ### Development Workflow
 
-1. Press `F5` to launch Extension Development Host
+1. Press `F5` to launch the Extension Development Host
 2. Make changes to source files
-3. Press `Ctrl+Shift+F5` to reload extension
+3. Press `Ctrl+Shift+F5` to reload the extension
 4. Use `npm run watch` for automatic compilation
 
 ## Testing
@@ -191,17 +206,15 @@ npm run test:adapter
 
 ## Architecture
 
-The extension uses a clean architecture with three main layers:
-
-- **Extension Host** (`src/extension.ts`): Command registration, webview lifecycle, message routing
+- **Extension Host** (`src/extension.ts`): command registration, webview lifecycle, message routing
 - **Data Adapter** (`src/daemonBeadsAdapter.ts`): CLI-based daemon adapter for all database operations
-- **Webview UI** (`src/webview/board.js`, `src/webview/editForm.js`, `media/styles.css`): Reactive UI with incremental loading
+- **Webview UI** (`src/webview/board.js`, `src/webview/treeBuilder.ts`, `media/styles.css`): reactive UI with incremental loading
 
 See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 ## Visual Testing
 
-The extension includes a standalone visual test server for automated UI testing with Chrome DevTools MCP:
+A standalone visual test server renders the webview in regular Chrome for automated UI testing:
 
 ```bash
 # Launch the test server (opens Chrome with the board rendered using mock data)
@@ -214,44 +227,39 @@ npm run test:visual-server -- --theme=light
 npm run test:visual-server -- --no-chrome
 ```
 
-The server renders the exact same webview HTML/CSS/JS as the VS Code extension, with a mock VS Code API that responds to all message types. Chrome DevTools MCP agents can then automate visual validation across all views (Kanban, Table, Graph, dialogs).
+It serves the same webview HTML/CSS/JS as the extension, with a mock VS Code API that responds to all message types. This exists because Chrome DevTools tooling cannot attach to VS Code's Electron webview host.
 
 See `scripts/seed-test-data.sh` for creating representative test data in a real `.beads` database.
 
 ## Contributing
 
-Contributions are welcome! This is an actively maintained fork where the original author became non-responsive.
+Issues and pull requests are welcome at [balaji-dutt/Beads-Kanban](https://github.com/balaji-dutt/Beads-Kanban).
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Commit your changes
+4. Push and open a pull request
 
 ### Development Guidelines
 
-- Follow existing code style (use ESLint)
+- Follow existing code style (`npm run lint`)
 - Add tests for new features
 - Update documentation as needed
 - Keep commits focused and well-described
 
 ## Attribution
 
-This project is a fork of the original work by [sebcook-ctrl](https://github.com/sebcook-ctrl/agent.native.activity.layer.beads). When the original author became non-responsive, this repository was established to continue active development and accept community contributions.
+This is a fork of a fork. The lineage, oldest first:
 
-**Original Project**: [agent.native.activity.layer.beads](https://github.com/sebcook-ctrl/agent.native.activity.layer.beads)
+1. [sebcook-ctrl/agent.native.activity.layer.beads](https://github.com/sebcook-ctrl/agent.native.activity.layer.beads) — the original work.
+2. [davidcforbes/Beads-Kanban](https://github.com/davidcforbes/Beads-Kanban) — forked from the above and carried it through version 2.1.2, adding the table and graph views. Dormant since April 2026.
+3. This repository — forked from davidcforbes, and the maintained line from 2.2.0 onward.
+
+The `upstream` remote still points at davidcforbes so changes there can be picked up if it revives.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE).
 
 Copyright (c) 2024 Agent Native Kanban Contributors
 Original work Copyright (c) 2024 sebcook-ctrl
-
----
-
-## Gratitude
-
-Made with ❤️ for the Beads community
-
-Questions? Open an [issue](https://github.com/davidcforbes/beads-kanban/issues) or start a [discussion](https://github.com/davidcforbes/beads-kanban/discussions)!
