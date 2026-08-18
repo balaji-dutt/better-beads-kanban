@@ -32,14 +32,14 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 2. Clone your fork locally:
 
    ```bash
-   git clone https://github.com/YOUR-USERNAME/Beads-Kanban.git
-   cd Beads-Kanban
+   git clone https://github.com/YOUR-USERNAME/better-beads-kanban.git
+   cd better-beads-kanban
    ```
 
 3. Add upstream remote:
 
    ```bash
-   git remote add upstream https://github.com/davidcforbes/Beads-Kanban.git
+   git remote add upstream https://github.com/balaji-dutt/better-beads-kanban.git
    ```
 
 ### Install Dependencies

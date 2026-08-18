@@ -8,19 +8,29 @@ View, create, edit, and organize the [Beads](https://github.com/steveyegge/beads
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![VS Code](https://img.shields.io/badge/VS%20Code-1.90+-blue)
 
-## What this fork changes
+## Why this fork
 
-Upstream has been dormant since April 2026. This fork continues it, and the differences are not cosmetic — on a bd 1.x repository, several things simply did not work:
+Upstream has been dormant since April 2026. This fork continues it, and the differences are not cosmetic — on a bd 1.x repository, several things simply did not work.
+
+| | Upstream 2.1.4 | Better Beads Kanban |
+|---|---|---|
+| bd 1.x / Dolt repositories | Watcher globs `*.db`/`*.sqlite`, so the board never auto-refreshes | Watches bd's write signals and the Dolt journal |
+| Filters | Exclusive semantics — unchecking a value still showed it; closed issues shown by default | Inclusive multi-select with an `Active` default, matching `bd list` |
+| Tree view | — | Parent/child hierarchy mirroring `bd list`, connector guides, per-level sibling sort |
+| Rendering | Markdown preview pane never appeared; table issue IDs truncated to their last 8 characters | Preview works; full IDs |
+| UI state | Sort, filters, and view choice reset on every panel close | Persist across close/reopen |
+| Multi-root workspaces | Uses the first folder unconditionally | Picker choice → every root → upward walk |
+| Missing `bd` on PATH | Reported as "Database file not found" | Names `bd`, PATH, and `beadsKanban.bdPath` |
+
+The detail behind the rows that are hardest to take on trust:
 
 **bd 1.x and Dolt support.** bd 1.x replaced SQLite with Dolt. The file watcher globbed `.beads/**/*.{db,sqlite,sqlite3}`, so on a Dolt-backed repository it had never once fired and the board never auto-refreshed. It now watches bd's write signals at the top of `.beads` and the Dolt journal under `<database>/.dolt/noms/`, filtering out the server log, lock, and pid files that churn on their own.
 
-**Workspace discovery.** The board used `workspaceFolders[0]` unconditionally. A multi-root workspace worked only if the folder holding `.beads` happened to be listed first, and opening a subfolder of the repository did not work at all. Resolution now prefers the folder chosen in the repository picker, then checks every workspace root, then walks upward.
+**Workspace discovery.** The board used `workspaceFolders[0]` unconditionally. A multi-root workspace worked only if the folder holding `.beads` happened to be listed first, and opening a subfolder of the repository did not work at all. Resolution now prefers the folder chosen in the repository picker, then checks every workspace root, then walks upward — and that choice survives a reload, where before it was written to workspace state under a key nothing read.
 
 **A missing `bd` reported itself as a missing database.** `spawn bd ENOENT` was matched by a generic `ENOENT` branch, so a PATH problem surfaced as "Database file not found" and sent debugging into the folder picker. Spawn failures are classified first now, and the message names `bd`, PATH, and `beadsKanban.bdPath`.
 
-**The repository picker's choice survives a reload.** It was written to workspace state under a key nothing read.
-
-**Tree view**, a filter state machine with inclusive multi-select, relationship affordances, and UI state that persists across panel close/reopen.
+Kanban cards also carry child / blocks / blocked-by affordances, derived per issue from its own dependency arrays.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
@@ -105,7 +115,7 @@ Issue editing with all metadata fields, dependencies, and comments.
 
 This fork is **not** published to the VS Code Marketplace. Install the VSIX from this repository's releases:
 
-1. Download the latest `.vsix` from [Releases](https://github.com/balaji-dutt/Beads-Kanban/releases)
+1. Download the latest `.vsix` from [Releases](https://github.com/balaji-dutt/better-beads-kanban/releases)
 2. In VS Code: `Extensions > ... > Install from VSIX...`
 3. Select the downloaded file
 4. Reload VS Code
@@ -173,8 +183,8 @@ As of bd 1.x, issues are stored in a [Dolt](https://www.dolthub.com/) database u
 ### Build from Source
 
 ```bash
-git clone https://github.com/balaji-dutt/Beads-Kanban.git
-cd Beads-Kanban
+git clone https://github.com/balaji-dutt/better-beads-kanban.git
+cd better-beads-kanban
 
 npm install
 npm run compile
@@ -235,7 +245,7 @@ See `scripts/seed-test-data.sh` for creating representative test data in a real 
 
 ## Contributing
 
-Issues and pull requests are welcome at [balaji-dutt/Beads-Kanban](https://github.com/balaji-dutt/Beads-Kanban).
+Issues and pull requests are welcome at [balaji-dutt/better-beads-kanban](https://github.com/balaji-dutt/better-beads-kanban).
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)

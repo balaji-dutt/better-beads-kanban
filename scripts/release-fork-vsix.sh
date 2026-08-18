@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Cuts a fork VSIX release for balaji-dutt/Beads-Kanban.
+# Cuts a fork VSIX release for balaji-dutt/better-beads-kanban.
 #
 # This fork is not published to the VS Code Marketplace. It ships as a VSIX
 # attached to a GitHub release, which the dotfiles repo installs from a pinned
@@ -29,7 +29,7 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
-FORK_REPO="balaji-dutt/Beads-Kanban"
+FORK_REPO="balaji-dutt/better-beads-kanban"
 
 # --- Preconditions -----------------------------------------------------------
 

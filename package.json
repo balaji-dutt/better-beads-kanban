@@ -4,23 +4,25 @@
   "description": "Kanban, table, tree and graph views for Beads (bd) issues in VS Code, updated for bd 1.x and Dolt-backed repositories",
   "repository": {
     "type": "git",
-    "url": "https://github.com/balaji-dutt/Beads-Kanban.git"
+    "url": "https://github.com/balaji-dutt/better-beads-kanban.git"
   },
   "author": {
     "name": "balaji-dutt",
     "url": "https://github.com/balaji-dutt"
   },
   "license": "MIT",
-  "homepage": "https://github.com/balaji-dutt/Beads-Kanban",
-  "bugs": "https://github.com/balaji-dutt/Beads-Kanban/issues",
-  "qna": "https://github.com/balaji-dutt/Beads-Kanban/discussions",
+  "homepage": "https://github.com/balaji-dutt/better-beads-kanban",
+  "bugs": "https://github.com/balaji-dutt/better-beads-kanban/issues",
   "keywords": [
     "kanban",
     "issue-tracking",
     "beads",
+    "bd",
+    "dolt",
     "project-management",
-    "agile",
-    "visualization"
+    "tree-view",
+    "dependency-graph",
+    "vscode-extension"
   ],
   "version": "2.2.0",
   "publisher": "balaji-dutt",
