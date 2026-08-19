@@ -144,9 +144,18 @@ else
   # Without --target, GitHub creates the tag on the repository's default branch
   # rather than on the commit that was built, so checking out the tag yields the
   # wrong tree. Releases bd.1 through bd.3 all carry this defect.
+  #
+  # --latest is passed rather than left to the default because the two sources
+  # disagree on what that default is: the REST API documents make_latest as
+  # defaulting to true, while `gh release create --help` describes it as
+  # automatic, based on release date and version. The automatic form would have
+  # to compare "v2.2.0" against tags shaped like
+  # "bd-fixes-v2.1.4-bd.5-fed50b3", which is not a comparison worth trusting.
+  # Every release this script cuts is the newest one, so say so.
   gh release create "${TAG}" \
     --repo "${FORK_REPO}" \
     --target "${FULL_SHA}" \
+    --latest \
     --title "${RELEASE_TITLE}" \
     --notes "Fork build of ${PACKAGE_NAME} ${VERSION} from ${BRANCH} at ${SHA}. See CHANGELOG.md for what changed." \
     "${TARGET_VSIX}" SHA256SUMS
