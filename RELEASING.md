@@ -3,9 +3,9 @@
 How a backlog item becomes a shipped release, and how to cut one.
 
 This fork is **not** on the VS Code Marketplace. It ships as a VSIX attached to a
-GitHub release on `balaji-dutt/better-beads-kanban`. The Marketplace instructions
-in `CLAUDE.md` and `PUBLISHING.md` describe upstream's path and are kept as
-history — they are not this path.
+GitHub release on `balaji-dutt/better-beads-kanban`. Upstream's Marketplace
+runbook was removed in bbk-vi1; if you find instructions anywhere that mention
+`vsce publish` or a publisher account, they are not this path.
 
 ## How the backlog maps to a release
 

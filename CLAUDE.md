@@ -187,27 +187,26 @@ The webview calls `saveState()` on every relevant UI change (sort click, column 
 
 The `topBarFilters` field of `UIStateSchema` holds the Priority / Type / Status dropdown selections under inclusive-multiselect semantics: each entry is an array of explicitly-checked values, an empty array means "None selected" (no card passes that filter), and the "All" / "Active" preset rows are derived from set-equality against the universe / active subset rather than stored as separate filter values. The companion field `topBarFiltersVersion: 2` stamps payloads written by builds using these semantics. The `migrateUIState()` helper in `src/types.ts` reads any persisted payload missing the version field as the older "empty array = All" shape, expands empty arrays to their full universe (`STATUS_ALL_VALUES`, `PRIORITY_ALL_VALUES`, `TYPE_ALL_VALUES`), and stamps the version. The extension's `readPersistedUIState` runs every raw `workspaceState` payload through `migrateUIState` before `UIStateSchema.safeParse`, so the webview only ever sees the current shape.
 
-### Database Schema
+### Issue Shape
 
-The extension reads from a SQLite database at `.beads/*.db` (or .sqlite/.sqlite3). The DB is expected to include:
+**The extension never opens the database.** bd 1.x stores issues in Dolt (or JSONL), not SQLite, and there is no file the extension could usefully read — `src/beadsWatch.ts` watches Dolt's internal storage only to detect *that* something changed, never to parse it. Every read and every mutation goes through the `bd` CLI and its `--json` output. There is no SQL layer, no ORM, and no schema owned by this repo.
 
-Core tables
+What matters here is therefore the JSON shape `bd` returns, not a table layout:
 
-- `issues` - id, title, description, status, priority, issue_type, assignee, estimated_minutes, created_at, updated_at, closed_at, external_ref, acceptance_criteria, design, notes, due_at, defer_until, pinned, is_template, ephemeral, event/agent metadata, deleted_at
-- `dependencies` - issue_id, depends_on_id, type (parent-child | blocks)
-- `labels` - issue_id, label
-- `comments` - id, issue_id, author, text, created_at
+- **Issue fields** - id, title, description, status, priority, issue_type, assignee, estimated_minutes, created_at, updated_at, closed_at, external_ref, acceptance_criteria, design, notes, due_at, defer_until, pinned, is_template, ephemeral, event/agent metadata
+- **Relationships** - `parent`, `children`, `blocks`, `blocked_by`, each an array of issue references carrying a `dependency_type` of `parent-child` or `blocks`
+- **`labels`** - array of strings
+- **`comments`** - array of `{ id, author, text, created_at }`
 
-Views
+Not every field is present on every command — `bd list` returns a narrower set than `bd show`. See the table under "Data Adapter" below, which is the reason the three-tier load exists.
 
-- `ready_issues` - open issues with no blockers
-- `blocked_issues` - issues with dependencies (includes blocked_by_count)
+Readiness and blocking are computed by bd, not by this extension: `bd ready` decides what is unblocked, and `bd show --json` reports `blocked_by_count`. Do not reimplement that logic locally.
 
 ### Column Logic
 
 The board displays 4 columns:
 
-1. Ready - status = open and present in ready_issues
+1. Ready - status = open and reported ready by bd
 2. In Progress - status = in_progress
 3. Blocked - status = blocked, or blocked_by_count > 0, or open but not ready
 4. Closed - status = closed
@@ -265,6 +264,23 @@ The extension uses the DaemonBeadsAdapter exclusively for all database operation
 - Short-lived cache to reduce CLI overhead
 - Exposes `getColumnData` / `getColumnCount` for incremental loading paths
 - Auto-starts daemon on extension load if not running
+
+**Which fields each command returns**
+
+This asymmetry is the whole reason for the three-tier `MinimalCard` / `EnrichedCard` / `FullCard` split. `bd list` is cheap but omits everything a card badge needs; `bd show` has it all but costs one process per issue. Consult this before adding a field to a card — if it is `bd show`-only, rendering it on the board means an N+1 of CLI calls.
+
+| Field | `bd list` | `bd show` | Used on a card |
+|---|---|---|---|
+| id, title, status, priority, issue_type | yes | yes | required |
+| description | yes | yes | search only (can be large) |
+| created_at, updated_at | yes | yes | sorting |
+| created_by, closed_at, close_reason | yes | yes | not shown |
+| dependency_count | yes | **no** | blocked badge |
+| dependent_count | yes | **no** | not shown |
+| assignee, estimated_minutes, labels | **no** | yes | badge |
+| blocked_by_count, external_ref, pinned | **no** | yes | badge |
+| acceptance_criteria, design, notes, due_at, defer_until | **no** | yes | edit dialog only |
+| parent, children, blocks, blocked_by, comments | **no** | yes | edit dialog only |
 
 ### Input Validation
 
@@ -467,211 +483,18 @@ const issue = result as { id?: string } | null;
 return issue?.id;
 ```
 
-## Publishing to VS Code Marketplace
+## Releasing
 
-> This section describes upstream's Marketplace path and is kept as history. This fork is not on the Marketplace — it ships a VSIX from GitHub Releases. See [RELEASING.md](RELEASING.md) for the path that actually applies.
+This fork is **not** on the VS Code Marketplace. It ships as a VSIX attached to a GitHub release on `balaji-dutt/better-beads-kanban`.
 
-### Publisher details (this project)
+**See [RELEASING.md](RELEASING.md).** That is the only description of the path that applies: how backlog scope maps to a release, the CHANGELOG-first ordering `scripts/bump-version.js` enforces, `npm run release:bump`, and `scripts/release-fork-vsix.sh` for the dry run and the publish.
 
-- **Publisher ID:** `davidcforbes` (case-insensitive; marketplace renders as `DavidCForbes`)
-- **Owning Microsoft account:** `chris@forbesassetmanagement.com` — the PAT and the marketplace web upload must both be performed signed in as this account, NOT the `davidcforbes@aol.com` account that bd uses for its actor identity.
-- **Publisher management page:** <https://marketplace.visualstudio.com/manage/publishers/davidcforbes>
-- **Public listing:** <https://marketplace.visualstudio.com/items?itemName=DavidCForbes.beads-kanban>
+Two traps worth repeating here, because both have cost time:
 
-### Recommended workflow: package locally, upload via web UI
+- **Do not run `npm run release:package` for a fork release.** That is the Marketplace path. `release-fork-vsix.sh` runs its own verify and package; running both packages twice and can leave a stray VSIX behind.
+- **`package.json` and `src/webview.ts` versions must match exactly.** The webview cache-bust query string is keyed on the constant in `webview.ts`. `release:bump` updates both in lockstep — do not edit either by hand.
 
-`vsce publish` has been observed to fail intermittently with `read ECONNRESET` during PAT verification on this Windows + PowerShell setup. **The reliable path is to package locally with `vsce package` and upload the resulting `.vsix` through the marketplace web UI.** Steps:
-
-1. **Add a CHANGELOG entry** at the top of `CHANGELOG.md` (Keep-a-Changelog format) — `release:bump` refuses to proceed without it.
-
-2. **Bump versions and verify-build-package in two npm commands:**
-   ```powershell
-   npm run release:bump -- X.Y.Z      # updates package.json + src/webview.ts in lockstep
-   npm run release:package             # tsc + lint + test + vsce package
-   ```
-   `release:bump` validates the version is plain `major.minor.patch` (marketplace rejects pre-release tags), verifies the CHANGELOG heading is present, and only writes if every check passes. `release:package` runs the full verify chain (typecheck + lint + Mocha suite) before packaging — it's the one-shot pre-upload command.
-
-   Expected `release:package` tail: `DONE  Packaged: C:\dev\beads-kanban\beads-kanban-X.Y.Z.vsix (~37 files, ~1.1 MB)`.
-
-   ⚠️ **PowerShell, NOT Git Bash** — `vsce package` fails silently in Git Bash on Windows.
-
-3. **(Optional) Test-install locally before uploading:**
-   ```powershell
-   code --install-extension beads-kanban-X.Y.Z.vsix
-   ```
-
-4. **Upload via the marketplace web UI** — this is the step that actually publishes:
-   - Open <https://marketplace.visualstudio.com/manage/publishers/davidcforbes> in a browser signed into Microsoft as `chris@forbesassetmanagement.com` (use an InPrivate window if your default browser is signed into a different account).
-   - Find the `beads-kanban` row → click the `…` menu → **Update**.
-   - Drag-and-drop or browse to `C:\dev\beads-kanban\beads-kanban-X.Y.Z.vsix`.
-   - Wait for the row to flip from "Verifying" to "Published" (a few seconds to a couple of minutes). CDN propagation to all VS Code clients takes ~5–15 minutes after that.
-
-5. **Commit and tag** after the marketplace shows "Published":
-   ```powershell
-   git add package.json src/webview.ts CHANGELOG.md
-   git commit -m "Bump version to X.Y.Z"
-   git tag vX.Y.Z
-   git push
-   git push --tags
-   ```
-
-6. **Verify the publish landed:**
-   ```powershell
-   code --install-extension davidcforbes.beads-kanban --force
-   code --list-extensions --show-versions | Select-String beads-kanban
-   ```
-   Should report `davidcforbes.beads-kanban@X.Y.Z`.
-
-### Fallback: CLI publish (if web UI is unavailable)
-
-`vsce publish` works when it works, but be prepared for it to fail. Prerequisites:
-
-1. **PAT generated from the right Microsoft account.** Sign into <https://dev.azure.com/_usersSettings/tokens> as `chris@forbesassetmanagement.com` (NOT a different MS account — generating from the wrong account is what causes `ERROR The Personal Access Token verification has failed`).
-2. **PAT scopes:** Custom defined → **Marketplace → Manage**, Organization: **All accessible organizations**.
-3. **Sanity-check the PAT in Notepad before pasting:** standard Azure DevOps PATs are **52 characters**, alphanumeric only. If your prompt shows ~84 asterisks, you almost certainly pasted a JWT/GitHub token by mistake — regenerate.
-4. Run from PowerShell:
-   ```powershell
-   npx @vscode/vsce login davidcforbes        # paste 52-char PAT at prompt
-   npx @vscode/vsce publish                    # uses package.json version
-   ```
-
-If `vsce publish` returns `read ECONNRESET` even with a valid PAT, fall back to step 6 of the recommended workflow (web upload) — don't burn time troubleshooting transport failures. Symptoms that indicate it's a network/proxy issue rather than a PAT issue:
-
-```powershell
-# Should return 200/203/401, not hang or error:
-curl -sS -o NUL -w "HTTP %{http_code}`n" https://marketplace.visualstudio.com/_apis/public/gallery
-```
-
-**Package.json Requirements:**
-
-- `version`: Semantic versioning (X.Y.Z)
-- `publisher`: Must match your publisher account
-- `displayName`: User-friendly name
-- `description`: Clear description (< 200 chars recommended)
-- `icon`: Path to 128x128 PNG icon
-- `repository`: GitHub repo URL
-- `license`: License type (MIT, Apache, etc.)
-- `engines.vscode`: Minimum VS Code version
-- `categories`: Marketplace categories
-- `keywords`: Search keywords
-
-**README.md Requirements:**
-
-- Clear description of what the extension does
-- Screenshots or GIFs showing functionality
-- Installation instructions
-- Usage guide
-- Configuration options
-- Requirements/prerequisites
-- License information
-
-### Marketplace Guidelines
-
-- Extension must provide value and work as described
-- No executable code in README (security requirement)
-- Icon must be clear and recognizable at small sizes
-- Screenshots should be high-quality and relevant
-- Description should be clear and concise
-- All links in README should work
-- License must be specified
-
-### Version Management
-
-**CRITICAL**: When bumping version, update in TWO places:
-
-1. `package.json` - Extension version
-2. `src/webview.ts` - Cache-busting version string
-
-These must match for proper webview cache invalidation.
-
-### CHANGELOG format
-
-When adding a new version entry to `CHANGELOG.md`, follow Keep-a-Changelog conventions:
-- Version number and date at the top of the file
-- Category headings: 🚀 Performance, ✨ Added, 🐛 Bug Fixes, 🔧 Build System, 📚 Documentation, 🧹 Cleanup, 📦 Marketplace metadata, etc.
-- Bullet points describing changes
-
-Example:
-```markdown
-## [2.0.X] - 2026-01-XX
-
-### 🚀 Performance
-
-- **Feature name**: Description of changes
-  - Technical details
-  - Impact metrics
-
-### 🐛 Bug Fixes
-
-- **Issue description**: How it was fixed
-```
-
-**Verify package contents** after `vsce package`:
-
-```powershell
-npx @vscode/vsce ls beads-kanban-X.Y.Z.vsix
-ls beads-kanban-X.Y.Z.vsix
-```
-
-Should include ~37 files (~1.1 MB):
-- `out/extension.js` (bundled extension host)
-- `out/webview/board.js` (bundled webview)
-- `media/` (CSS, JS libraries)
-- `images/` (icon, screenshots)
-- Documentation (README, CHANGELOG, LICENSE, PUBLISHING, MIGRATION, SECURITY, ROADMAP_BEADS_BRIDGE)
-- `.github/` (templates, workflows)
-
-**Quick Reference - Files to Update:**
-
-| File | What to Change | Example |
-|------|---------------|---------|
-| `package.json` | `"version": "X.Y.Z"` | `"version": "2.1.2"` |
-| `src/webview.ts` | `const version = "X.Y.Z"` (line 6) | `const version = "2.1.2"` |
-| `CHANGELOG.md` | Add new version entry at top | See format above |
-
-**Common Issues:**
-
-- **Wrong file count / huge package**: If you see hundreds of files or >2 MB, the bundler regressed — confirm `out/extension.js` and `out/webview/board.js` exist and `.vscodeignore` excludes `src/**`, `node_modules/**`, and `out/test/**`. Healthy package is ~37 files / ~1.1 MB.
-- **Build fails**: Run `npm run compile` first to test bundling independently of `vsce`.
-- **Version mismatch warning**: `package.json` and `src/webview.ts` versions must match exactly — the cache-bust query string is keyed on the constant in `webview.ts`.
-- **`vsce publish` returns `read ECONNRESET`**: Don't troubleshoot — fall back to web upload at <https://marketplace.visualstudio.com/manage/publishers/davidcforbes>.
-- **`vsce publish` returns `Personal Access Token verification has failed`**: PAT was generated from the wrong Microsoft account. The publisher is owned by `chris@forbesassetmanagement.com`; sign into <https://dev.azure.com/_usersSettings/tokens> as that account and regenerate.
-- **PAT prompt shows ~84 asterisks instead of ~52**: You pasted the wrong kind of token (likely a JWT or GitHub token). Standard ADO PATs are 52 alphanumeric characters with no whitespace.
-
-### Publishing Output Reference
-
-**Expected output when packaging and publishing:**
-
-The `vsce package` and `vsce publish` commands will:
-1. Execute `vscode:prepublish` script (compile, copy-deps, build-webview)
-2. Bundle the extension files into a VSIX package
-3. Upload to the VS Code Marketplace (for publish command)
-
-**Bundling optimization:** The extension uses esbuild to bundle both:
-- Extension host code (`out/extension.js`) - Single bundled file from all TypeScript sources
-- Webview code (`out/webview/board.js`) - Bundled with Pragmatic Drag and Drop library
-
-This reduces the VSIX from 900+ files to under 50 files, improving:
-- Installation speed
-- Extension activation time
-- Overall performance
-
-**Before bundling optimization** (version 2.0.5 and earlier):
-```
-WARNING  This extension consists of 900 files, out of which 592 are JavaScript files.
-DONE  Packaged: beads-kanban-2.0.5.vsix (900 files, 2.26 MB)
-```
-
-**After bundling optimization** (version 2.0.6+, current packaging produces ~37 files / ~1.1 MB):
-```
-✓ Extension host bundle built successfully
-✓ Webview bundle built successfully
-DONE  Packaged: beads-kanban-X.Y.Z.vsix (37 files, ~1.1 MB)
-```
-
-This represents a ~96% reduction in file count and ~50% reduction in package size compared to pre-bundling.
-
-See "Extension Bundling" section below for implementation details.
+A full Marketplace publishing runbook used to live here, inherited from upstream along with `PUBLISHING.md`. Both were removed in bbk-vi1: they described a publisher account this fork does not own and a distribution channel it does not use. `git log -- PUBLISHING.md` has the history if it is ever needed.
 
 ## Extension Bundling
 
@@ -739,8 +562,12 @@ scripts/**          # Exclude build scripts
 **Important:** After bundling, the VSIX should include:
 - `out/extension.js` - Bundled extension host
 - `out/webview/board.js` - Bundled webview
-- `media/**` - Static assets (CSS, images, marked.js, purify.js)
+- `media/**` - Static assets (CSS, marked.js, purify.js)
+- `images/**` - Icon and README screenshots
+- `.github/**` - Issue and PR templates (deliberate; they are small)
 - `package.json`, `README.md`, `LICENSE`, `CHANGELOG.md`
+
+Documentation shipping to users is **only** `README.md` and `CHANGELOG.md`. Everything else in the root — `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, `TESTING.md`, `RELEASING.md`, `SECURITY.md` — is named in `.vscodeignore` and stays out. Adding a new root document means adding a matching line there; the default is to ship, which is how four upstream planning documents ended up inside installed extensions before bbk-vi1.
 
 ### External Dependencies
 

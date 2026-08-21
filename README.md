@@ -247,24 +247,21 @@ See `scripts/seed-test-data.sh` for creating representative test data in a real 
 
 Issues and pull requests are welcome at [balaji-dutt/better-beads-kanban](https://github.com/balaji-dutt/better-beads-kanban).
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, branch and commit conventions, the test layout, and what a reviewable pull request looks like. [TESTING.md](TESTING.md) covers running the suite and the manual QA pass before a release.
+
+The short version:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
+3. Commit your changes, following existing code style (`npm run lint`)
 4. Push and open a pull request
-
-### Development Guidelines
-
-- Follow existing code style (`npm run lint`)
-- Add tests for new features
-- Update documentation as needed
-- Keep commits focused and well-described
 
 ## Attribution
 
 This is a fork of a fork. The lineage, oldest first:
 
 1. [sebcook-ctrl/agent.native.activity.layer.beads](https://github.com/sebcook-ctrl/agent.native.activity.layer.beads) — the original work.
-2. [davidcforbes/Beads-Kanban](https://github.com/davidcforbes/Beads-Kanban) — forked from the above and carried it through version 2.1.2, adding the table and graph views. Dormant since April 2026.
+2. [davidcforbes/Beads-Kanban](https://github.com/davidcforbes/Beads-Kanban) — forked from the above and carried it through version 2.1.4, adding the table and graph views. Dormant since April 2026.
 3. This repository — forked from davidcforbes, and the maintained line from 2.2.0 onward.
 
 The `upstream` remote still points at davidcforbes so changes there can be picked up if it revives.

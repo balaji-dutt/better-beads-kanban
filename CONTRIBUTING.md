@@ -1,339 +1,156 @@
-# Contributing to Beads Kanban
+# Contributing to Better Beads Kanban
 
-Thank you for your interest in contributing to Beads Kanban! This document provides guidelines and instructions for contributing to the project.
-
-## Table of Contents
-
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Workflow](#development-workflow)
-- [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
-- [Testing Guidelines](#testing-guidelines)
-- [Reporting Bugs](#reporting-bugs)
-- [Suggesting Features](#suggesting-features)
-
-## Code of Conduct
-
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md). Please read it before contributing.
+Thanks for your interest. This is a single-maintainer fork, so PRs are welcome but
+review is best-effort and may take a while. If you are planning something substantial,
+open an issue first rather than building it and hoping.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 20 or higher
+- Node.js 20 or higher (CI uses 22, per `.node-version`)
 - VS Code 1.90 or higher
 - Git
-- Beads CLI (`bd`) for testing daemon adapter features
+- [Beads CLI](https://github.com/steveyegge/beads) (`bd`) on `PATH`, or configured via
+  the `beadsKanban.bdPath` setting
 
-### Fork and Clone
+The extension shells out to `bd` for everything. Without it, the board cannot load and
+most of the test suite skips.
 
-1. Fork the repository on GitHub
-2. Clone your fork locally:
-
-   ```bash
-   git clone https://github.com/YOUR-USERNAME/better-beads-kanban.git
-   cd better-beads-kanban
-   ```
-
-3. Add upstream remote:
-
-   ```bash
-   git remote add upstream https://github.com/balaji-dutt/better-beads-kanban.git
-   ```
-
-### Install Dependencies
+### Fork, clone, install
 
 ```bash
+git clone https://github.com/YOUR-USERNAME/better-beads-kanban.git
+cd better-beads-kanban
+git remote add upstream https://github.com/balaji-dutt/better-beads-kanban.git
 npm install
 ```
 
-### Build and Run
+### Build and run
 
 ```bash
-# Compile TypeScript
-npm run compile
-
-# Watch mode for development
-npm run watch
-
-# Run extension in debug mode
-# Press F5 in VS Code with the project open
+npm run compile      # bundle extension host + webview, copy deps
+npm run watch        # rebuild on change
 ```
+
+Press `F5` in VS Code to launch the Extension Development Host, then run
+**Beads: Open Kanban Board**.
+
+`scripts/seed-test-data.sh` populates a `.beads` database with representative issues
+to develop against.
 
 ## Development Workflow
 
-### 1. Create a Branch
+### Branches
 
-Always create a new branch for your work:
+`feature/`, `fix/`, `docs/`, `refactor/`, `test/` — pick the one that fits and add a
+short slug: `fix/tree-connector-alignment`.
 
-```bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/your-bug-fix
+### Commits
+
+Conventional Commits:
+
+```
+feat(table): add column reordering via drag-and-drop
+fix(kanban): resolve card position after drag
+docs(readme): update installation instructions
 ```
 
-Branch naming conventions:
+Types in use: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`.
 
-- `feature/` - New features
-- `fix/` - Bug fixes
-- `docs/` - Documentation updates
-- `refactor/` - Code refactoring
-- `test/` - Test additions/improvements
-
-### 2. Make Changes
-
-- Write clean, readable code
-- Follow the existing code style
-- Add comments for complex logic
-- Update documentation as needed
-
-### 3. Test Your Changes
+### Before you open a PR
 
 ```bash
-# Run all tests
-npm test
-
-# Run specific test suite
-npm run test:adapter
-npm run test:validation
-
-# Run tests in watch mode
-npm run test:watch
-
-# Check test coverage
-npm run test:coverage
+npm run verify       # tsc --noEmit, then eslint, then the extension suite
 ```
 
-### 4. Lint Your Code
+That is the same gate `scripts/release-fork-vsix.sh` runs before packaging. If it
+passes locally it should pass in CI.
 
-```bash
-npm run lint
-```
+Checklist:
 
-### 5. Commit Your Changes
+- [ ] `npm run verify` passes
+- [ ] New behaviour has a test; bug fixes have a regression test
+- [ ] Docs updated if you changed architecture (`CLAUDE.md`) or user-facing behaviour (`README.md`)
+- [ ] Screenshots for UI changes
+- [ ] Breaking changes called out explicitly
 
-We use conventional commit messages:
-
-```bash
-git commit -m "type(scope): description"
-```
-
-**Types:**
-
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Test additions or modifications
-- `chore`: Build process or tooling changes
-- `perf`: Performance improvements
-
-**Examples:**
-
-```bash
-git commit -m "feat(table): add column reordering via drag-and-drop"
-git commit -m "fix(kanban): resolve card position issue after drag"
-git commit -m "docs(readme): update installation instructions"
-```
-
-### 6. Push to Your Fork
-
-```bash
-git push origin your-branch-name
-```
-
-### 7. Create a Pull Request
-
-1. Go to your fork on GitHub
-2. Click "New Pull Request"
-3. Select your branch
-4. Fill out the PR template
-5. Link related issues using keywords (e.g., "Fixes #123")
-
-## Pull Request Process
-
-### Before Submitting
-
-- [ ] Code compiles without errors
-- [ ] All tests pass
-- [ ] ESLint shows no errors
-- [ ] Documentation is updated
-- [ ] Commit messages follow conventions
-- [ ] Branch is up to date with main
-
-### PR Requirements
-
-1. **Clear Description**: Explain what changes you made and why
-2. **Screenshots**: Include before/after screenshots for UI changes
-3. **Testing**: Describe how you tested your changes
-4. **Breaking Changes**: Clearly mark any breaking changes
-
-### Review Process
-
-1. A maintainer will review your PR within 1-2 weeks
-2. Address any requested changes
-3. Once approved, your PR will be merged
-4. Your contribution will be credited in the release notes
+Do not add a `CHANGELOG.md` entry in your PR. Entries are written at release-cut time
+from the release's scope — see [RELEASING.md](RELEASING.md).
 
 ## Coding Standards
 
 ### TypeScript
 
-- Use TypeScript for all new code
-- Enable strict type checking
-- Avoid `any` types when possible
-- Document complex types with comments
+- Use `unknown` rather than `any` in production code, with explicit type assertions at
+  the point of use. `CLAUDE.md` has the patterns this codebase settled on.
+- Test files (`**/*.test.ts`, anything under `src/test/`) relax that rule — `any` is
+  allowed there.
+- `npm run lint` must pass with no errors. Style beyond what ESLint enforces: match the
+  surrounding file.
 
-### Code Style
-
-- Use 4 spaces for indentation (tabs for TypeScript)
-- Use single quotes for strings
-- Add semicolons
-- Use meaningful variable names
-- Keep functions small and focused
-- Maximum line length: 120 characters
-
-### File Organization
+### Layout
 
 ```text
 src/
-├── extension.ts        # Extension entry point
-├── beadsAdapter.ts     # sql.js adapter
-├── daemonBeadsAdapter.ts  # Daemon adapter
-├── types.ts            # Type definitions
-└── test/
-    └── suite/          # Test files
-media/
-├── board.js            # Webview UI logic
-└── styles.css          # Webview styling
+├── extension.ts            # entry point: commands, panel, message routing
+├── daemonBeadsAdapter.ts   # all bd CLI interaction
+├── beadsWorkspace.ts       # which folder holds .beads (no vscode import)
+├── beadsWatch.ts           # file-watch globs for auto-refresh (no vscode import)
+├── sanitizeError.ts        # scrubs CLI errors before they reach the webview
+├── types.ts                # types and Zod schemas
+├── webview.ts              # webview HTML, CSP, asset URIs
+├── webview/                # UI: board.js, graph-view.js, treeBuilder.ts, ...
+└── test/suite/             # Mocha tests
+media/                      # styles.css, marked.min.js, purify.min.js
 ```
 
-### Documentation
+`beadsWorkspace.ts` and `beadsWatch.ts` deliberately avoid importing `vscode` so they
+can be unit-tested without an Extension Development Host. Keep it that way.
 
-- Add JSDoc comments for public functions
-- Document complex algorithms
-- Update README.md for feature changes
-- Update CLAUDE.md for architecture changes
+### Security rules
 
-## Testing Guidelines
+`CLAUDE.md` has a "Security Rules" section. These are not suggestions — each one is
+there because it was violated and caused a bug. The short version:
 
-### Test Categories
+- Every `innerHTML` assignment goes through `DOMPurify.sanitize()`, even for
+  pre-escaped values.
+- Every webview message handler validates its payload with a Zod schema before use.
+- All flags go **before** the `--` separator in `execBd` calls.
+- Never embed raw CLI stderr in a thrown error; run it through `sanitizeError()`.
 
-1. **Unit Tests**: Test individual functions and modules
-2. **Integration Tests**: Test adapter integration
-3. **UI Tests**: Test webview functionality
+## Testing
 
-### Writing Tests
+See [TESTING.md](TESTING.md) for the full picture. The one thing that trips people up:
+the suite uses Mocha's **tdd** interface — `suite()` / `test()` with node `assert`. Not
+`describe()` / `it()`, and not chai. A test written the other way silently never runs.
 
-```typescript
-import { describe, it } from 'mocha';
-import { expect } from 'chai';
+## Working on issues
 
-describe('MyFeature', () => {
-    it('should do something specific', () => {
-        // Arrange
-        const input = 'test';
+This repo tracks its own backlog with `bd`, prefix `bbk-`. `AGENTS.md` covers the
+workflow, including one trap worth stating here: **`bd` does not work from a git
+worktree, and running `bd init` there creates a second, empty database that syncs
+nowhere.** Run `bd` against the main checkout instead.
 
-        // Act
-        const result = myFunction(input);
+External contributors do not need `bd` for issue tracking — use GitHub Issues.
 
-        // Assert
-        expect(result).to.equal('expected');
-    });
-});
-```
+## Reporting Bugs and Suggesting Features
 
-### Test Coverage
+Use the templates at
+[balaji-dutt/better-beads-kanban/issues](https://github.com/balaji-dutt/better-beads-kanban/issues).
 
-- Aim for >80% code coverage
-- All new features must include tests
-- All bug fixes must include regression tests
+For bugs, include VS Code version, extension version, OS, `bd --version`, steps to
+reproduce, and anything from the Output panel or the webview Developer Tools console.
 
-## Reporting Bugs
+## Debugging
 
-### Before Reporting
-
-1. Check if the bug has already been reported in [Issues](https://github.com/davidcforbes/Beads-Kanban/issues)
-2. Verify the bug in the latest version
-3. Collect relevant information:
-   - VS Code version
-   - Extension version
-   - Operating system
-   - Steps to reproduce
-   - Expected vs actual behavior
-
-### Bug Report Template
-
-Use the bug report template when creating an issue. Include:
-
-- Clear, descriptive title
-- Detailed steps to reproduce
-- Expected behavior
-- Actual behavior
-- Screenshots if applicable
-- Error messages from Developer Console
-- Environment details
-
-## Suggesting Features
-
-### Before Suggesting
-
-1. Check existing [Issues](https://github.com/davidcforbes/Beads-Kanban/issues) and [Discussions](https://github.com/davidcforbes/Beads-Kanban/discussions)
-2. Consider if the feature aligns with project goals
-3. Think about how it benefits most users
-
-### Feature Request Template
-
-Use the feature request template when creating an issue. Include:
-
-- Clear, descriptive title
-- Problem statement: What problem does this solve?
-- Proposed solution: How should it work?
-- Alternatives considered
-- Mockups or examples (if applicable)
-- Why this would benefit users
-
-## Development Tips
-
-### Debugging the Extension
-
-1. Press `F5` to launch Extension Development Host
-2. Open Developer Tools: `Help > Toggle Developer Tools`
-3. Set breakpoints in TypeScript files
-4. Use `console.log()` in webview code
-5. Check the Output panel for extension logs
-
-### Testing with Large Databases
-
-```bash
-# Create test database with many issues
-bd create "Test issue {1..1000}" --type task
-
-# Test incremental loading
-# Open Kanban board and verify performance
-```
-
-### Hot Reload
-
-The extension supports hot reload for webview changes:
-
-1. Make changes to `media/board.js` or `media/styles.css`
-2. Click "Refresh" button in the webview
-3. No need to reload the entire extension
-
-## Questions?
-
-- **GitHub Discussions**: [Ask questions](https://github.com/davidcforbes/Beads-Kanban/discussions)
-- **Issues**: [Report bugs or request features](https://github.com/davidcforbes/Beads-Kanban/issues)
+1. `F5` launches the Extension Development Host
+2. **Help > Toggle Developer Tools** for the webview console
+3. Extension host logs go to the Output panel
+4. `npm run test:visual-server` renders the webview in regular Chrome with mock data,
+   which is the only way to use Chrome DevTools tooling against this UI — it cannot
+   attach to VS Code's Electron webview host
 
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
-
----
-
-**Thank you for contributing to Beads Kanban!** 🎉
-
-Your contributions help make this project better for everyone in the Beads community.

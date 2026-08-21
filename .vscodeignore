@@ -47,19 +47,21 @@ SHA256SUMS
 # every checked-out branch.
 worktrees/**
 
-# Documentation & Specs (keep only README, CHANGELOG, LICENSE, PUBLISHING, MIGRATION)
+# Documentation
+#
+# The VSIX ships exactly three documents: README.md, CHANGELOG.md, LICENSE.
+# Everything else is contributor- or maintainer-facing and is listed below.
+#
+# The default here is to SHIP — a new root .md with no line in this block ends up
+# inside every installed extension. That is how four upstream planning documents
+# and a 95 KB roadmap diagram reached end users before bbk-vi1. Add the line when
+# you add the file.
 AGENTS.md
-ARCHITECTURE_PROPOSAL_FAST_LOADING.md
 CLAUDE.md
-COMPREHENSIVE_TEST_PLAN.md
 CONTRIBUTING.md
-External_Dependencies_Review.md
-GEMINI.md
-SECURITY_REVIEW.md
-TESTING_STRATEGY.md
+RELEASING.md
+SECURITY.md
 TESTING.md
-WEB_EXTENSION_PLAN.md
-# Keep CHANGELOG.md, README.md, LICENSE, PUBLISHING.md, MIGRATION.md
 
 # Build & Test Config
 .node-version
@@ -68,7 +70,6 @@ WEB_EXTENSION_PLAN.md
 .gitattributes
 .vscodeignore
 tsconfig.json
-inspect_schema.js
 *.py
 
 # Test Data & Results
@@ -88,7 +89,6 @@ package-log.txt
 scripts/**
 
 # Source Images (keep images/ used by README/icon)
-Beads-Kanban-Logo.png
 Beads-Kanban-Logo2.png
 # Exclude root-level screenshots (keep only images/ folder)
 Screenshot*.jpg

@@ -44,11 +44,9 @@ Fixes #
 
 <!-- Describe the tests you ran and how to reproduce them -->
 
+- [ ] `npm run verify` passes (typecheck, lint, extension suite)
 - [ ] Manual testing in Extension Development Host
-- [ ] Unit tests (all passing)
-- [ ] Integration tests (all passing)
-- [ ] Tested with sql.js adapter
-- [ ] Tested with daemon adapter
+- [ ] Integration scripts (`npm run test:all`)
 - [ ] Tested on Windows
 - [ ] Tested on macOS
 - [ ] Tested on Linux
@@ -58,7 +56,7 @@ Fixes #
 - VS Code version:
 - Extension version:
 - Operating System:
-- Adapter type:
+- `bd --version`:
 
 ## Checklist
 
@@ -73,7 +71,10 @@ Fixes #
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] Any dependent changes have been merged and published
 - [ ] I have checked my code and corrected any misspellings
-- [ ] I have updated CHANGELOG.md (if applicable)
+
+<!-- Do not add a CHANGELOG.md entry. Entries are written at release-cut time
+     from the release's scope — see RELEASING.md. -->
+
 
 ## Breaking Changes
 
