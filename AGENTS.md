@@ -2,6 +2,16 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## In a git worktree, read this first
+
+`.beads/` is gitignored, so a worktree has no database and every `bd` command fails with `no beads database found`. **Do not run `bd init`** — it creates a second, empty backlog that syncs nowhere. Run against the main checkout instead:
+
+```bash
+command bd -C "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" ready
+```
+
+See the "Working in a git worktree" section of CLAUDE.md for the full picture.
+
 ## Quick Reference
 
 ```bash

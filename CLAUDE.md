@@ -787,3 +787,30 @@ No bead carries a version number. Release scope is expressed as dependency edges
 `.beads/` being gitignored does **not** pin the backlog to one machine. The Dolt working files are what stays untracked; the issue *data* syncs to `refs/dolt/data` on the same GitHub remote — a ref namespace that never appears in the working tree. On a second machine: clone, then `bd dolt pull`.
 
 **`routing.mode` must stay `maintainer`** in `.beads/config.yaml`. This machine has a global `routing.contributor = ~/.beads-planning` with `routing.mode = auto`, which silently routes `bd create` writes into that separate planning database (prefix `bktest-`) instead of this repo's. The symptom is issues coming back with the wrong prefix and `bd list` showing unrelated seed fixtures.
+
+### Working in a git worktree
+
+**`bd` does not work from a worktree, and must not be made to.** A worktree only receives tracked files. `.beads/` is gitignored, so a worktree has neither the database nor the `config.yaml` carrying the `routing.mode: maintainer` pin. Every `bd` command there fails with:
+
+```
+Error: no beads database found
+Hint: run 'bd where' to inspect the resolved workspace, or 'bd init' to create a new database
+```
+
+**Do not follow that hint. `bd init` creates a second, empty database inside the worktree** — a silent fork of the backlog that syncs nowhere. Nothing recovers from it automatically.
+
+Run bd against the main checkout instead. Derive the path rather than hardcoding it, so this works from any worktree and on either machine:
+
+```bash
+BD_REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+command bd -C "$BD_REPO" ready
+```
+
+`--git-common-dir` resolves to the main checkout's `.git` from any linked worktree, so `$BD_REPO` is the main checkout.
+
+Two consequences worth knowing:
+
+- **There is one database, not per-branch state.** Closing an issue on a feature branch closes it immediately and globally, whether or not that branch ever merges. Close when the work is done; reopen if the branch is abandoned.
+- **Opening a worktree in VS Code hits `bbk-p86`.** A worktree opened as a single-root window has no `.beads`, so the board climbs upward and adopts `~/.beads` — which is not a bd repository — then fails with a bd error rather than saying no repository was found. Add the main checkout as a second workspace folder, or use the repository picker, until that bug is fixed.
+
+Merging a worktree branch into `main` is unaffected. No bead data is tracked by git; it travels on `refs/dolt/data` via `bd dolt push` / `bd dolt pull`, and refs are shared across worktrees. There is nothing for a merge to conflict on.
