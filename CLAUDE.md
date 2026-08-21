@@ -624,6 +624,20 @@ No bead carries a version number. Release scope is expressed as dependency edges
 
 `.beads/` being gitignored does **not** pin the backlog to one machine. The Dolt working files are what stays untracked; the issue *data* syncs to `refs/dolt/data` on the same GitHub remote — a ref namespace that never appears in the working tree. On a second machine: clone, then `bd dolt pull`.
 
+**The Dolt remote is configured separately from the git remote, and has drifted before.** `bd dolt remote list` should show:
+
+```
+origin               git+ssh://git@github-balajidutt/balajidutt/better-beads-kanban.git
+```
+
+It was found pointing at the pre-`bbk-7lf` owner path, over bare `github.com` instead of the `github-balajidutt` alias — so it resolved through the machine's default SSH identity rather than the scoped one. That kept working, because GitHub redirects renamed repos over SSH and the default key had access, which is exactly why it went unnoticed. There is no `set-url`: fix it with `bd dolt remote remove origin`, then `bd dolt remote add origin <url>`. Dolt shells out to `git`, so `~/.ssh/config` host aliases resolve normally.
+
+**`bd dolt push` prints `Push complete.` even when nothing moved** — upstream [gastownhall/beads#5433](https://github.com/gastownhall/beads/issues/5433). After a push that matters, confirm the ref actually advanced:
+
+```bash
+git ls-remote origin refs/dolt/data
+```
+
 **`routing.mode` must stay `maintainer`** in `.beads/config.yaml`. This machine has a global `routing.contributor = ~/.beads-planning` with `routing.mode = auto`, which silently routes `bd create` writes into that separate planning database (prefix `bktest-`) instead of this repo's. The symptom is issues coming back with the wrong prefix and `bd list` showing unrelated seed fixtures.
 
 ### Working in a git worktree
