@@ -1,87 +1,42 @@
 # Pull Request
 
-## Description
+## What this changes
 
-<!-- Provide a clear and concise description of your changes -->
-
-## Type of Change
-
-<!-- Mark the relevant option with an "x" -->
-
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Code refactoring (no functional changes)
-- [ ] Performance improvement
-- [ ] Test addition or improvement
-
-## Related Issues
-
-<!-- Link related issues using keywords: Fixes #123, Closes #456, Relates to #789 -->
+<!-- What the change does and why. If it fixes a reported bug, say what was wrong. -->
 
 Fixes #
 
-## Changes Made
+## Type of change
 
-<!-- Provide a detailed list of changes -->
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation
+- [ ] Refactor or performance
+- [ ] Tests
 
--
--
--
+## How it was tested
+
+- [ ] `npm run verify` passes (typecheck, lint, extension suite)
+- [ ] Manual check in the Extension Development Host
+- [ ] `npm run test:all`
+
+Tested on: <!-- Windows / macOS / Linux, plus VS Code and `bd --version` -->
 
 ## Screenshots
 
-<!-- For UI changes, include before/after screenshots -->
+<!-- Before and after, for anything visual. Delete this section if it does not apply. -->
 
-**Before:**
+## Breaking changes
 
-**After:**
-
-## Testing
-
-### How Has This Been Tested?
-
-<!-- Describe the tests you ran and how to reproduce them -->
-
-- [ ] `npm run verify` passes (typecheck, lint, extension suite)
-- [ ] Manual testing in Extension Development Host
-- [ ] Integration scripts (`npm run test:all`)
-- [ ] Tested on Windows
-- [ ] Tested on macOS
-- [ ] Tested on Linux
-
-### Test Configuration
-
-- VS Code version:
-- Extension version:
-- Operating System:
-- `bd --version`:
+<!-- What breaks and what people have to do about it. Delete if none. -->
 
 ## Checklist
 
-<!-- Mark completed items with an "x" -->
-
-- [ ] My code follows the project's code style (ran `npm run lint`)
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings or errors
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
-- [ ] Any dependent changes have been merged and published
-- [ ] I have checked my code and corrected any misspellings
+- [ ] New behaviour has a test; bug fixes have a regression test
+- [ ] Docs updated if this changed architecture (`CLAUDE.md`) or user-facing behaviour (`README.md`)
+- [ ] Read the Security Rules section of `CLAUDE.md` if this touches `innerHTML`, a webview
+      message handler, `execBd` arguments, or error text
 
 <!-- Do not add a CHANGELOG.md entry. Entries are written at release-cut time
      from the release's scope — see RELEASING.md. -->
-
-
-## Breaking Changes
-
-<!-- If this PR introduces breaking changes, describe them here and provide migration instructions -->
-
-N/A
-
-## Additional Notes
-
-<!-- Any additional information, context, or concerns -->
