@@ -22,7 +22,7 @@ most of the test suite skips.
 ```bash
 git clone https://github.com/YOUR-USERNAME/better-beads-kanban.git
 cd better-beads-kanban
-git remote add upstream https://github.com/balaji-dutt/better-beads-kanban.git
+git remote add upstream https://github.com/balajidutt/better-beads-kanban.git
 npm install
 ```
 
@@ -137,7 +137,7 @@ External contributors do not need `bd` for issue tracking — use GitHub Issues.
 ## Reporting Bugs and Suggesting Features
 
 Use the templates at
-[balaji-dutt/better-beads-kanban/issues](https://github.com/balaji-dutt/better-beads-kanban/issues).
+[balajidutt/better-beads-kanban/issues](https://github.com/balajidutt/better-beads-kanban/issues).
 
 For bugs, include VS Code version, extension version, OS, `bd --version`, steps to
 reproduce, and anything from the Output panel or the webview Developer Tools console.

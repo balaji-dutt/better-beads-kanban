@@ -440,6 +440,17 @@ Two independent copies of such a variable cause the unsaved-change guard to be b
 
 This rule earned its place: `src/webview/editForm.js` was a full duplicate of the edit dialog that no longer participated in the build, and its stale `window.__editFormDirty` handshake outlived it. The file has been deleted — the edit dialog lives only in `src/webview/board.js`. Do not reintroduce a parallel copy.
 
+### GitHub Identity for Public Writes
+
+**Rule: any `gh` command that writes a public author to this repo MUST run as `balajidutt`.**
+
+This repo is owned by `balajidutt`. The machine's default active `gh` account is a different one, and that is deliberate — see the note below. Release authors and issue/PR authors are permanent: GitHub provides no way to reassign either after creation.
+
+- **Releases** are already fenced. `scripts/release-fork-vsix.sh` switches to `balajidutt`, verifies the switch took, and restores the previous account through an `EXIT` trap. Do not bypass it by calling `gh release create` directly.
+- **Issues and PRs** have no script to hang a guard on. Before `gh issue create`, `gh pr create`, or any comment written from the CLI, run `gh auth switch --user balajidutt` and switch back afterwards. This matters from the moment `bbk-8f2` enables Issues.
+
+Everything else is safe to leave alone. `git push`, `git fetch`, and `bd dolt push` go over SSH via the `github-balajidutt` host alias and never consult `gh` at all, and `gh api` reads carry no author. So the default account stays put rather than being switched globally — the switch is scoped to the operations that leave a public trace.
+
 ## Common Bug Patterns
 
 ### Dialog Visibility Issues
@@ -485,7 +496,7 @@ return issue?.id;
 
 ## Releasing
 
-This fork is **not** on the VS Code Marketplace. It ships as a VSIX attached to a GitHub release on `balaji-dutt/better-beads-kanban`.
+This fork is **not** on the VS Code Marketplace. It ships as a VSIX attached to a GitHub release on `balajidutt/better-beads-kanban`.
 
 **See [RELEASING.md](RELEASING.md).** That is the only description of the path that applies: how backlog scope maps to a release, the CHANGELOG-first ordering `scripts/bump-version.js` enforces, `npm run release:bump`, and `scripts/release-fork-vsix.sh` for the dry run and the publish.
 

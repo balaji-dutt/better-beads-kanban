@@ -18,7 +18,7 @@ body:
           required: true
         - label: I am using the latest version of Better Beads Kanban
           required: true
-        - label: I have checked the [documentation](https://github.com/balaji-dutt/better-beads-kanban#readme)
+        - label: I have checked the [documentation](https://github.com/balajidutt/better-beads-kanban#readme)
           required: false
 
   - type: textarea

@@ -2,11 +2,11 @@
 
 ## Supported versions
 
-This is a single-maintainer fork of [davidcforbes/Beads-Kanban](https://github.com/davidcforbes/Beads-Kanban), distributed as a VSIX from [GitHub Releases](https://github.com/balaji-dutt/better-beads-kanban/releases). Only the most recent release gets fixes. There are no maintenance branches, and older VSIXs are never patched in place — the fix ships in the next release and you reinstall.
+This is a single-maintainer fork of [davidcforbes/Beads-Kanban](https://github.com/davidcforbes/Beads-Kanban), distributed as a VSIX from [GitHub Releases](https://github.com/balajidutt/better-beads-kanban/releases). Only the most recent release gets fixes. There are no maintenance branches, and older VSIXs are never patched in place — the fix ships in the next release and you reinstall.
 
 ## Reporting a vulnerability
 
-Report privately through [GitHub Security Advisories](https://github.com/balaji-dutt/better-beads-kanban/security/advisories/new). Please do not open a public issue for anything exploitable.
+Report privately through [GitHub Security Advisories](https://github.com/balajidutt/better-beads-kanban/security/advisories/new). Please do not open a public issue for anything exploitable.
 
 No response-time commitment is offered. This is a spare-time project, so a realistic expectation is days to weeks, not hours. You will get an acknowledgement either way — including if the report is declined, with the reason.
 

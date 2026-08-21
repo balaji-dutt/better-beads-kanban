@@ -4,15 +4,15 @@
   "description": "Kanban, table, tree and graph views for Beads (bd) issues in VS Code, updated for bd 1.x and Dolt-backed repositories",
   "repository": {
     "type": "git",
-    "url": "https://github.com/balaji-dutt/better-beads-kanban.git"
+    "url": "https://github.com/balajidutt/better-beads-kanban.git"
   },
   "author": {
-    "name": "balaji-dutt",
-    "url": "https://github.com/balaji-dutt"
+    "name": "Balaji Dutt",
+    "url": "https://github.com/balajidutt"
   },
   "license": "MIT",
-  "homepage": "https://github.com/balaji-dutt/better-beads-kanban",
-  "bugs": "https://github.com/balaji-dutt/better-beads-kanban/issues",
+  "homepage": "https://github.com/balajidutt/better-beads-kanban",
+  "bugs": "https://github.com/balajidutt/better-beads-kanban/issues",
   "keywords": [
     "kanban",
     "issue-tracking",

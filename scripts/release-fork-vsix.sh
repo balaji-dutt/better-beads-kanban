@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Cuts a fork VSIX release for balaji-dutt/better-beads-kanban.
+# Cuts a fork VSIX release for balajidutt/better-beads-kanban.
 #
 # This fork is not published to the VS Code Marketplace. It ships as a VSIX
 # attached to a GitHub release, which the dotfiles repo installs from a pinned
@@ -29,7 +29,7 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
-FORK_REPO="balaji-dutt/better-beads-kanban"
+FORK_REPO="balajidutt/better-beads-kanban"
 
 # --- Preconditions -----------------------------------------------------------
 
@@ -42,6 +42,40 @@ fi
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "ERROR: gh is required to create the release." >&2
+  exit 1
+fi
+
+# --- gh identity -------------------------------------------------------------
+#
+# A release's author is public and cannot be changed after it is created, and any
+# account with write access can create one. gh's active account is global rather
+# than per-directory, and this machine deliberately leaves a different account
+# active for everyday work. Without this guard the script would happily stamp
+# whichever account happened to be active onto a permanent, public artifact.
+#
+# So: borrow the owner's identity for this run and hand it back on the way out.
+# The EXIT trap fires on success, on failure under `set -e`, and on Ctrl-C. Only
+# SIGKILL skips it, which leaves the account switched — recoverable with a single
+# `gh auth switch` and caught by this same guard on the next run.
+EXPECTED_OWNER="${FORK_REPO%%/*}"
+PREV_GH_ACCOUNT=$(gh api user --jq .login 2>/dev/null || true)
+
+restore_gh_account() {
+  if [ -n "${PREV_GH_ACCOUNT:-}" ] && [ "$PREV_GH_ACCOUNT" != "$EXPECTED_OWNER" ]; then
+    gh auth switch --hostname github.com --user "$PREV_GH_ACCOUNT" >/dev/null 2>&1 || true
+  fi
+}
+trap restore_gh_account EXIT
+
+if [ "${PREV_GH_ACCOUNT:-}" != "$EXPECTED_OWNER" ] \
+   && ! gh auth switch --hostname github.com --user "$EXPECTED_OWNER" >/dev/null 2>&1; then
+  echo "ERROR: gh has no '${EXPECTED_OWNER}' account to switch to." >&2
+  echo "  Run: gh auth login --hostname github.com --git-protocol ssh --scopes repo" >&2
+  exit 1
+fi
+
+if [ "$(gh api user --jq .login 2>/dev/null || true)" != "$EXPECTED_OWNER" ]; then
+  echo "ERROR: gh identity is not '${EXPECTED_OWNER}'; refusing to create a release." >&2
   exit 1
 fi
 

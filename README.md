@@ -115,7 +115,7 @@ Issue editing with all metadata fields, dependencies, and comments.
 
 This fork is **not** published to the VS Code Marketplace. Install the VSIX from this repository's releases:
 
-1. Download the latest `.vsix` from [Releases](https://github.com/balaji-dutt/better-beads-kanban/releases)
+1. Download the latest `.vsix` from [Releases](https://github.com/balajidutt/better-beads-kanban/releases)
 2. In VS Code: `Extensions > ... > Install from VSIX...`
 3. Select the downloaded file
 4. Reload VS Code
@@ -183,7 +183,7 @@ As of bd 1.x, issues are stored in a [Dolt](https://www.dolthub.com/) database u
 ### Build from Source
 
 ```bash
-git clone https://github.com/balaji-dutt/better-beads-kanban.git
+git clone https://github.com/balajidutt/better-beads-kanban.git
 cd better-beads-kanban
 
 npm install
@@ -245,7 +245,7 @@ See `scripts/seed-test-data.sh` for creating representative test data in a real 
 
 ## Contributing
 
-Issues and pull requests are welcome at [balaji-dutt/better-beads-kanban](https://github.com/balaji-dutt/better-beads-kanban).
+Issues and pull requests are welcome at [balajidutt/better-beads-kanban](https://github.com/balajidutt/better-beads-kanban).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, branch and commit conventions, the test layout, and what a reviewable pull request looks like. [TESTING.md](TESTING.md) covers running the suite and the manual QA pass before a release.
 

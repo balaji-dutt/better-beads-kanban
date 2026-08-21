@@ -3,9 +3,24 @@
 How a backlog item becomes a shipped release, and how to cut one.
 
 This fork is **not** on the VS Code Marketplace. It ships as a VSIX attached to a
-GitHub release on `balaji-dutt/better-beads-kanban`. Upstream's Marketplace
+GitHub release on `balajidutt/better-beads-kanban`. Upstream's Marketplace
 runbook was removed in bbk-vi1; if you find instructions anywhere that mention
 `vsce publish` or a publisher account, they are not this path.
+
+## Accounts and remotes
+
+The repo is owned by the `balajidutt` GitHub account, which is separate from the
+account `gh` is normally logged in as. Two consequences:
+
+- `origin` uses the `github-balajidutt` SSH host alias, not `github.com`. The
+  alias and its key are provisioned by the `private-dotfiles` chezmoi source. On
+  Windows there is no keychain, so run `ssh-add` on the key once per session or
+  every push prompts for the passphrase.
+- **You do not need to switch `gh` accounts by hand to cut a release.**
+  `scripts/release-fork-vsix.sh` borrows the `balajidutt` identity for its own
+  run and restores the previous active account on exit. It refuses to run if
+  that account is not configured — a release's author is public and cannot be
+  changed afterwards, which is the whole reason for the guard.
 
 ## How the backlog maps to a release
 
@@ -159,8 +174,10 @@ of scope for this repo.
 ### 6. Verify the release landed
 
 ```bash
-gh release view vX.Y.Z --repo balaji-dutt/better-beads-kanban
+gh release view vX.Y.Z --repo balajidutt/better-beads-kanban
 ```
 
 Check the tag resolves to the commit you built, `Latest` is set, and both assets
-are attached.
+are attached. Also check the release author is `balajidutt` — the script's guard
+should make that automatic, and an author of anything else means the guard was
+bypassed and the release needs deleting and recreating.
