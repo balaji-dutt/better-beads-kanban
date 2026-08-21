@@ -469,6 +469,8 @@ return issue?.id;
 
 ## Publishing to VS Code Marketplace
 
+> This section describes upstream's Marketplace path and is kept as history. This fork is not on the Marketplace — it ships a VSIX from GitHub Releases. See [RELEASING.md](RELEASING.md) for the path that actually applies.
+
 ### Publisher details (this project)
 
 - **Publisher ID:** `davidcforbes` (case-insensitive; marketplace renders as `DavidCForbes`)
@@ -779,6 +781,8 @@ This project uses **bd (beads)** for its own backlog, dogfooding the extension. 
 - `bd ready` — available work, respecting blockers
 - `bd show <id>` / `bd create` / `bd close <id> --reason "..."`
 - `bd dolt push` / `bd dolt pull` — cross-machine sync
+
+No bead carries a version number. Release scope is expressed as dependency edges into a release bead — see [RELEASING.md](RELEASING.md).
 
 `.beads/` being gitignored does **not** pin the backlog to one machine. The Dolt working files are what stays untracked; the issue *data* syncs to `refs/dolt/data` on the same GitHub remote — a ref namespace that never appears in the working tree. On a second machine: clone, then `bd dolt pull`.
 
