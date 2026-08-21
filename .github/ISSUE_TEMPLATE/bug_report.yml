@@ -56,14 +56,12 @@ body:
     validations:
       required: true
 
-  - type: dropdown
+  - type: input
     id: os
     attributes:
       label: Operating system
-      options:
-        - Windows
-        - macOS
-        - Linux
+      description: Include the version. Several bugs here have turned out to be Windows-only.
+      placeholder: "e.g. macOS 26.0.1, Ubuntu 22.04, Windows 11"
     validations:
       required: true
 

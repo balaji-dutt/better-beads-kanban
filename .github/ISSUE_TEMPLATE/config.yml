@@ -3,6 +3,3 @@ contact_links:
   - name: bd CLI bug or question
     url: https://github.com/steveyegge/beads/issues
     about: The extension shells out to bd for every read and write. If the board will not load at all, bd is often the cause — report those upstream.
-  - name: Security vulnerability
-    url: https://github.com/balajidutt/better-beads-kanban/security/advisories/new
-    about: Report privately through GitHub Security Advisories. Please do not open a public issue for anything exploitable.
